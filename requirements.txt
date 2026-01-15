@@ -11,3 +11,5 @@ pydantic[email]
 pypdf
 sentence-transformers
 pgvector
+sentence-transformers
+torch
