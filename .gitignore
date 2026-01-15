@@ -1,0 +1,49 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Distribution / packaging
+bin/
+build/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Specific to FastAPI/Python projects
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.tox/
+.coverage
+coverage.xml
+site/
+
+# IDE-specific files (optional, depending on your IDE)
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# macOS
+.DS_Store
+
+# Logs and databases (adjust as needed)
+*.log
+*.sqlite
+db.sqlite3
