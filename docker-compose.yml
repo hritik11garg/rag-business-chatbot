@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: ankane/pgvector
+    container_name: rag-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ragpass
+      POSTGRES_DB: ragdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
