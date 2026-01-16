@@ -1,4 +1,5 @@
 from typing import List
+from sqlalchemy import text
 
 from sentence_transformers import SentenceTransformer
 from sqlalchemy.orm import Session
@@ -47,3 +48,47 @@ def store_embeddings(
 
     db.bulk_save_objects(records)
     db.commit()
+
+
+def similarity_search(
+    db: Session,
+    *,
+    organization_id: int,
+    query_embedding: list[float],
+    limit: int = 5,
+):
+    """
+    Perform vector similarity search using pgvector.
+    Returns top matching document chunks.
+    """
+
+    sql = text(
+        """
+        SELECT content, document_id
+        FROM document_embeddings
+        WHERE organization_id = :org_id
+        ORDER BY embedding <-> CAST(:query_embedding AS vector)
+        LIMIT :limit
+        """
+    )
+
+    results = db.execute(
+        sql,
+        {
+            "org_id": organization_id,
+            "query_embedding": query_embedding,
+            "limit": limit,
+        },
+    ).fetchall()
+
+    return results
+
+def embed_query(text: str) -> list[float]:
+    """
+    Generate embedding for a user query.
+    """
+    return embedding_model.encode(
+        text,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+    ).tolist()

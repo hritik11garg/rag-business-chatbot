@@ -5,7 +5,7 @@ from app.api.deps import get_current_user
 from app.db.base import Base
 from app.db.session import engine
 from app.db import models  # noqa: F401
-from app.api.routes import auth, documents
+from app.api.routes import auth, documents, chat
 from app.db.models.user import User
 
 
@@ -53,5 +53,5 @@ def read_me(current_user: User = Depends(get_current_user)):
 
 app.include_router(auth.router)
 app.include_router(documents.router)
-
+app.include_router(chat.router)
 
