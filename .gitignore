@@ -9,6 +9,14 @@ env/
 venv/
 ENV/
 
+
+.cache/
+**/.cache/
+uploads/
+docker-data/
+Thumbs.db
+
+
 # Distribution / packaging
 bin/
 build/
