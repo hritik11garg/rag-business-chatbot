@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-
+from app.services.llm_service import generate_answer
 from app.api.deps import get_db, get_current_user
 from app.db.models.user import User
 from app.services.embedding_service import (
@@ -39,10 +39,14 @@ def chat(
 
     # 3️⃣ Build context (for now, just concatenate)
     context = "\n\n".join([row.content for row in matches])
+    
+    answer = generate_answer(
+    question=question,
+    context=context,
+    )
 
-    # 🔜 TEMPORARY RESPONSE (LLM comes next)
     return {
         "question": question,
-        "context_used": context,
-        "answer": "LLM integration coming next. Relevant context retrieved successfully."
+        "answer": answer,
     }
+
