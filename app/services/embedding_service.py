@@ -96,3 +96,29 @@ def embed_query(text: str) -> list[float]:
         convert_to_numpy=True,
         normalize_embeddings=True,
     ).tolist()
+
+def store_generated_faq_embeddings(
+    db,
+    *,
+    organization_id: int,
+    document_id: int,
+    faqs: list[dict],
+):
+    """
+    Store AI-generated FAQ embeddings derived from document chunks.
+    """
+
+    texts = [f"Q: {f['question']} A: {f['answer']}" for f in faqs]
+    vectors = generate_embeddings(texts)
+
+    for text, vector in zip(texts, vectors):
+        db.add(
+            DocumentEmbedding(
+                organization_id=organization_id,
+                document_id=document_id,
+                content=text,
+                embedding=vector,
+            )
+        )
+
+    db.commit()

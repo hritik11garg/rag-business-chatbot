@@ -5,12 +5,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_current_user
 from app.db.models.document import Document
 from app.db.models.user import User
-from app.services.embedding_service import store_embeddings
+from app.services.embedding_service import store_embeddings, store_generated_faq_embeddings
 from app.services.document_processing import (
     extract_text_from_pdf,
     normalize_text,
     chunk_text,
 )
+from app.services.faq_generator import generate_faqs_from_chunk
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -92,6 +93,23 @@ def upload_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate embeddings: {str(e)}",
         )
+
+
+    # 🤖 Generate FAQs from chunks using LLM
+    all_faqs = []
+    for chunk in chunks:
+        faqs = generate_faqs_from_chunk(chunk)
+        all_faqs.extend(faqs)
+
+    # Store generated FAQ embeddings
+    if all_faqs:
+        store_generated_faq_embeddings(
+            db,
+            organization_id=current_user.organization_id,
+            document_id=document.id,
+            faqs=all_faqs,
+        )
+
 
     # 7️⃣ Response
     return {
