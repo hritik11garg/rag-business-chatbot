@@ -7,6 +7,8 @@ from app.services.embedding_service import (
     embed_query,
     similarity_search,
 )
+from app.services.chat_memory import get_recent_history, save_message
+from app.services.confidence import evaluate_confidence
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -45,13 +47,59 @@ def chat(
     # Step 4: Build context from retrieved chunks
     context = "\n\n".join([row.content for row in matches])
 
+    history = get_recent_history(db, user_id=current_user.id)
+
+    history_text = "\n".join(
+        [f"{h.role.upper()}: {h.message}" for h in history]
+    )
+
+    full_context = f"""
+    Previous conversation:
+    {history_text}
+
+    Knowledge base context:
+    {context}
+    """
+
+
+    # 📄 Extract document sources used
+    sources = list({row.filename for row in matches})
+    
+
     # Step 5: Generate final grounded answer
     answer = generate_answer(
         question=question,
+        context=full_context,
+    )
+
+    confidence = evaluate_confidence(
+        question=question,
+        answer=answer,
         context=context,
     )
+
+
+    save_message(
+        db,
+        user_id=current_user.id,
+        organization_id=current_user.organization_id,
+        role="user",
+        message=question,
+    )
+
+    save_message(
+        db,
+        user_id=current_user.id,
+        organization_id=current_user.organization_id,
+        role="assistant",
+        message=answer,
+    )
+
 
     return {
         "question": question,
         "answer": answer,
+        "sources": list({row.filename for row in matches}),
+        "confidence": confidence,
     }
+

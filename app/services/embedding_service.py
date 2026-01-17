@@ -64,13 +64,16 @@ def similarity_search(
 
     sql = text(
         """
-        SELECT content, document_id, (embedding <-> CAST(:query_embedding AS vector)) AS distance
-        FROM document_embeddings
-        WHERE organization_id = :org_id
-        ORDER BY embedding <-> CAST(:query_embedding AS vector)
+        SELECT de.content, de.document_id, d.filename,
+            (de.embedding <-> CAST(:query_embedding AS vector)) AS distance
+        FROM document_embeddings de
+        JOIN documents d ON d.id = de.document_id
+        WHERE de.organization_id = :org_id
+        ORDER BY de.embedding <-> CAST(:query_embedding AS vector)
         LIMIT :limit
         """
     )
+
 
 
     results = db.execute(
