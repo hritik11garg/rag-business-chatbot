@@ -8,6 +8,7 @@ from app.services.embedding_service import (
     similarity_search,
 )
 
+
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
@@ -21,10 +22,10 @@ def chat(
     Answer a user question using organization-specific knowledge base.
     """
 
-    # 1️⃣ Embed the user question
+    # Step 1: Embed rewritten query
     query_embedding = embed_query(question)
 
-    # 2️⃣ Retrieve relevant chunks
+    # Step 2: Retrieve relevant chunks
     matches = similarity_search(
         db=db,
         organization_id=current_user.organization_id,
@@ -32,21 +33,25 @@ def chat(
         limit=5,
     )
 
+    # ✅ Step 3: Always check empty first
     if not matches:
         return {
-            "answer": "No relevant information found in the knowledge base."
+            "question": question,
+            "answer": "No relevant information found in the knowledge base.",
+            "confidence": "low",
         }
 
-    # 3️⃣ Build context (for now, just concatenate)
+
+    # Step 4: Build context from retrieved chunks
     context = "\n\n".join([row.content for row in matches])
-    
+
+    # Step 5: Generate final grounded answer
     answer = generate_answer(
-    question=question,
-    context=context,
+        question=question,
+        context=context,
     )
 
     return {
         "question": question,
         "answer": answer,
     }
-
