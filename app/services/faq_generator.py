@@ -27,8 +27,36 @@ def generate_faqs_from_chunk(chunk: str) -> list[dict]:
     """
 
     response = generate_answer(question=prompt, context="")
+
     try:
         import json
         return json.loads(response)
     except Exception:
         return []
+
+
+def generate_and_store_faqs(chunks, document_id, organization_id):
+    """
+    Background task to generate FAQs and store their embeddings
+    without blocking upload requests.
+    """
+
+    from app.db.session import SessionLocal
+    from app.services.embedding_service import store_generated_faq_embeddings
+
+    db = SessionLocal()
+
+    all_faqs = []
+    for chunk in chunks:
+        faqs = generate_faqs_from_chunk(chunk)
+        all_faqs.extend(faqs)
+
+    if all_faqs:
+        store_generated_faq_embeddings(
+            db,
+            organization_id=organization_id,
+            document_id=document_id,
+            faqs=all_faqs,
+        )
+
+    db.close()

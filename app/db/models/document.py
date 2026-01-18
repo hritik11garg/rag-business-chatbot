@@ -2,9 +2,6 @@ from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.services.faq_generator import generate_faqs_from_chunk
-from app.services.embedding_service import store_generated_faq_embeddings
-
 
 class Document(Base):
     """
