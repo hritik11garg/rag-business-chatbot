@@ -1,5 +1,8 @@
 from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import datetime
+from sqlalchemy import DateTime
+from sqlalchemy.sql import func
 
 from app.db.base import Base
 
@@ -23,4 +26,17 @@ class Document(Base):
     uploaded_by: Mapped[int] = mapped_column(
         ForeignKey("users.id"),
         nullable=False
+    )
+
+    # ⭐ Timestamp when document was created
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+
+    # ⭐ Timestamp when document was last updated
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now()
     )

@@ -32,7 +32,7 @@ Answer:
             "prompt": prompt,
             "stream": False,
         },
-        timeout=60,
+        timeout=300,
     )
 
     response.raise_for_status()

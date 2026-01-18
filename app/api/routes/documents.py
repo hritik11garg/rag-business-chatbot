@@ -12,9 +12,45 @@ from app.services.document_processing import (
     chunk_text,
 )
 from app.services.faq_generator import generate_and_store_faqs
+from typing import List
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+@router.get("", response_model=List[dict])
+def list_documents(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retrieve all documents belonging to the current user's organization.
+
+    Multi-tenant protection:
+    - A user can ONLY view documents uploaded under their organization.
+    - Prevents cross-company data access.
+    """
+
+    documents = (
+        db.query(Document)
+        .filter(Document.organization_id == current_user.organization_id)
+        .order_by(Document.id.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": doc.id,
+            "filename": doc.filename,
+            "content_type": doc.content_type,
+            "uploaded_by_user_id": doc.uploaded_by,
+            "created_at": doc.created_at,
+            "updated_at": doc.updated_at,
+        }
+        for doc in documents
+    ]
+
+
 
 # Base folder where all organization documents will be stored
 UPLOAD_BASE_DIR = "uploads"
