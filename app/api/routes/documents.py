@@ -17,8 +17,6 @@ from app.services.faq_generator import generate_faqs_from_chunk
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 UPLOAD_BASE_DIR = "uploads"
-
-
 @router.post("/upload", status_code=201)
 def upload_document(
     file: UploadFile = File(...),
@@ -39,9 +37,21 @@ def upload_document(
     org_dir = os.path.join(UPLOAD_BASE_DIR, f"org_{current_user.organization_id}")
     os.makedirs(org_dir, exist_ok=True)
 
-    file_path = os.path.join(org_dir, file.filename)
+    # 3️⃣ Enterprise-safe filename versioning
+    original_name = file.filename
+    name, ext = os.path.splitext(original_name)
 
-    # 3️⃣ Save file to disk
+    counter = 1
+    file_path = os.path.join(org_dir, original_name)
+
+    while os.path.exists(file_path):
+        counter += 1
+        new_name = f"{name}_v{counter}{ext}"
+        file_path = os.path.join(org_dir, new_name)
+
+    final_filename = os.path.basename(file_path)
+
+    # 4️⃣ Save file to disk
     try:
         with open(file_path, "wb") as f:
             f.write(file.file.read())
@@ -51,9 +61,28 @@ def upload_document(
             detail="Failed to save uploaded file",
         )
 
-    # 4️⃣ Create Document record
+    # 5️⃣ Validate PDF BEFORE DB insert
+    try:
+        raw_text = extract_text_from_pdf(file_path)
+        clean_text = normalize_text(raw_text)
+        chunks = chunk_text(clean_text)
+    except Exception:
+        os.remove(file_path)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded PDF is corrupted or unreadable",
+        )
+
+    if not chunks:
+        os.remove(file_path)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No readable text found in the document",
+        )
+
+    # 6️⃣ Create Document record ONLY after validation
     document = Document(
-        filename=file.filename,
+        filename=final_filename,
         content_type=file.content_type,
         organization_id=current_user.organization_id,
         uploaded_by=current_user.id,
@@ -63,24 +92,7 @@ def upload_document(
     db.commit()
     db.refresh(document)
 
-    # 5️⃣ Extract, clean, and chunk document text
-    try:
-        raw_text = extract_text_from_pdf(file_path)
-        clean_text = normalize_text(raw_text)
-        chunks = chunk_text(clean_text)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process document: {str(e)}",
-        )
-
-    if not chunks:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No readable text found in the document",
-        )
-
-    # 6️⃣ Generate and store embeddings (RAG ingestion)
+    # 7️⃣ Generate and store embeddings
     try:
         store_embeddings(
             db=db,
@@ -94,14 +106,12 @@ def upload_document(
             detail=f"Failed to generate embeddings: {str(e)}",
         )
 
-
-    # 🤖 Generate FAQs from chunks using LLM
+    # 🤖 Generate FAQs from chunks
     all_faqs = []
     for chunk in chunks:
         faqs = generate_faqs_from_chunk(chunk)
         all_faqs.extend(faqs)
 
-    # Store generated FAQ embeddings
     if all_faqs:
         store_generated_faq_embeddings(
             db,
@@ -110,11 +120,10 @@ def upload_document(
             faqs=all_faqs,
         )
 
-
-    # 7️⃣ Response
+    # 8️⃣ Response
     return {
         "id": document.id,
         "filename": document.filename,
         "organization_id": document.organization_id,
-        "chunks_stored": len(chunks)
+        "chunks_stored": len(chunks),
     }
