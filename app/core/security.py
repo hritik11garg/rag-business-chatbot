@@ -29,16 +29,15 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(
-    subject: str,
-    expires_delta: Optional[timedelta] = None,
+        subject: str,
+        expires_delta: Optional[timedelta] = None,
 ) -> str:
     """
     Create a JWT access token.
     """
     expire = datetime.now(timezone.utc) + timedelta(
-    minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
-
 
     payload = {
         "sub": subject,

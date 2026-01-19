@@ -1,6 +1,6 @@
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, Integer, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from pgvector.sqlalchemy import Vector
 
 from app.db.base import Base
 

@@ -1,24 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from app.services.llm_service import generate_answer
+
 from app.api.deps import get_db, get_current_user
 from app.db.models.user import User
+from app.services.chat_memory import get_recent_history, save_message
+from app.services.confidence import evaluate_confidence
 from app.services.embedding_service import (
     embed_query,
     similarity_search,
 )
-from app.services.chat_memory import get_recent_history, save_message
-from app.services.confidence import evaluate_confidence
-
+from app.services.llm_service import generate_answer
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 @router.post("")
 def chat(
-    question: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        question: str,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
     Answer a user question using organization-specific knowledge base.
@@ -43,7 +43,6 @@ def chat(
             "confidence": "low",
         }
 
-
     # Step 4: Build context from retrieved chunks
     context = "\n\n".join([row.content for row in matches])
 
@@ -61,10 +60,8 @@ def chat(
     {context}
     """
 
-
     # 📄 Extract document sources used
     sources = list({row.filename for row in matches})
-    
 
     # Step 5: Generate final grounded answer
     answer = generate_answer(
@@ -77,7 +74,6 @@ def chat(
         answer=answer,
         context=context,
     )
-
 
     save_message(
         db,
@@ -95,11 +91,9 @@ def chat(
         message=answer,
     )
 
-
     return {
         "question": question,
         "answer": answer,
         "sources": list({row.filename for row in matches}),
         "confidence": confidence,
     }
-

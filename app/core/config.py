@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "openai"
     OPENAI_API_KEY: str | None = None
 
-
     class Config:
         env_file = ".env"
 

@@ -1,7 +1,7 @@
-from pathlib import Path
-from pypdf import PdfReader
 import re
+from pathlib import Path
 
+from pypdf import PdfReader
 
 
 def normalize_text(text: str) -> str:
@@ -66,12 +66,10 @@ def extract_text_from_pdf(file_path: str) -> str:
     return "\n".join(extracted_text)
 
 
-
-
 def chunk_text(
-    text: str,
-    chunk_size: int = 500,
-    overlap: int = 100,
+        text: str,
+        chunk_size: int = 500,
+        overlap: int = 100,
 ) -> list[str]:
     """
     Split text into overlapping chunks.

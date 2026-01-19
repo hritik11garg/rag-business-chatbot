@@ -1,13 +1,12 @@
-from fastapi import FastAPI, Depends
 from contextlib import asynccontextmanager
-from app.core.config import settings
-from app.api.deps import get_current_user
-from app.db.base import Base
-from app.db.session import engine
-from app.db import models  # noqa: F401
-from app.api.routes import auth, documents, chat
-from app.db.models.user import User
 
+from fastapi import FastAPI, Depends
+
+from app.api.deps import get_current_user
+from app.api.routes import auth, documents, chat
+from app.core.config import settings
+from app.db import models  # noqa: F401
+from app.db.models.user import User
 
 
 @asynccontextmanager
@@ -37,6 +36,7 @@ def health_check():
     """
     return {"status": "ok"}
 
+
 @app.get("/me")
 def read_me(current_user: User = Depends(get_current_user)):
     """
@@ -48,7 +48,7 @@ def read_me(current_user: User = Depends(get_current_user)):
         "organization_id": current_user.organization_id,
     }
 
+
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(chat.router)
-

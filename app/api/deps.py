@@ -1,11 +1,13 @@
-from app.db.session import SessionLocal
 from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
-from fastapi.security import OAuth2PasswordBearer
+
 from app.core.config import settings
 from app.core.security import ALGORITHM
 from app.db.models.user import User
+from app.db.session import SessionLocal
+
 
 def get_db():
     """
@@ -18,11 +20,13 @@ def get_db():
     finally:
         db.close()
 
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
+        token: str = Depends(oauth2_scheme),
+        db: Session = Depends(get_db),
 ) -> User:
     """
     Validates JWT token and returns the current user.
@@ -57,4 +61,3 @@ def get_current_user(
         )
 
     return user
-

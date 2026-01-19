@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+
 from app.api.deps import get_db
-from app.api.schemas.auth import SignupRequest, LoginRequest, TokenResponse
+from app.api.schemas.auth import SignupRequest, TokenResponse
 from app.core.security import hash_password, verify_password, create_access_token
-from app.db.models.user import User
 from app.db.models.organization import Organization
+from app.db.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -44,8 +45,8 @@ def signup(data: SignupRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db),
+        form_data: OAuth2PasswordRequestForm = Depends(),
+        db: Session = Depends(get_db),
 ):
     """
     OAuth2-compatible login endpoint.
@@ -61,4 +62,3 @@ def login(
 
     token = create_access_token(subject=str(user.id))
     return TokenResponse(access_token=token)
-

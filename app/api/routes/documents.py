@@ -1,23 +1,21 @@
 import os
 from typing import List
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
-from sqlalchemy.orm import Session
+
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_user
 from app.db.models.document import Document
 from app.db.models.user import User
-
-from app.services.embedding_service import store_embeddings
 from app.services.document_processing import (
     extract_text_from_pdf,
     normalize_text,
     chunk_text,
 )
-
+from app.services.embedding_service import store_embeddings
 # Celery task (real background worker)
 from app.tasks.faq_tasks import generate_faqs_task
-
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -54,9 +52,9 @@ def list_documents(db: Session = Depends(get_db), current_user: User = Depends(g
 # =========================================================
 @router.post("/upload", status_code=201)
 def upload_document(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        file: UploadFile = File(...),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     if file.content_type != "application/pdf":
         raise HTTPException(400, "Only PDF files are supported")
@@ -135,7 +133,6 @@ def upload_document(
 # =========================================================
 @router.delete("/{document_id}", status_code=200)
 def delete_document(document_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-
     document = (
         db.query(Document)
         .filter(

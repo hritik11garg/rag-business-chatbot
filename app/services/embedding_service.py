@@ -1,11 +1,11 @@
 from typing import List
-from sqlalchemy import text
 
 from sentence_transformers import SentenceTransformer
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.db.models.embedding import DocumentEmbedding
 from app.db.models.document import Document
+from app.db.models.embedding import DocumentEmbedding
 
 # Load model once (IMPORTANT: do NOT reload per request)
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -23,11 +23,11 @@ def generate_embeddings(chunks: List[str]) -> List[List[float]]:
 
 
 def store_embeddings(
-    db: Session,
-    *,
-    organization_id: int,
-    document: Document,
-    chunks: List[str],
+        db: Session,
+        *,
+        organization_id: int,
+        document: Document,
+        chunks: List[str],
 ):
     """
     Generate embeddings and store them in the database.
@@ -51,11 +51,11 @@ def store_embeddings(
 
 
 def similarity_search(
-    db: Session,
-    *,
-    organization_id: int,
-    query_embedding: list[float],
-    limit: int = 5,
+        db: Session,
+        *,
+        organization_id: int,
+        query_embedding: list[float],
+        limit: int = 5,
 ):
     """
     Perform vector similarity search using pgvector.
@@ -74,8 +74,6 @@ def similarity_search(
         """
     )
 
-
-
     results = db.execute(
         sql,
         {
@@ -87,6 +85,7 @@ def similarity_search(
 
     return results
 
+
 def embed_query(text: str) -> list[float]:
     """
     Generate embedding for a user query.
@@ -97,12 +96,13 @@ def embed_query(text: str) -> list[float]:
         normalize_embeddings=True,
     ).tolist()
 
+
 def store_generated_faq_embeddings(
-    db,
-    *,
-    organization_id: int,
-    document_id: int,
-    faqs: list[dict],
+        db,
+        *,
+        organization_id: int,
+        document_id: int,
+        faqs: list[dict],
 ):
     """
     Store AI-generated FAQ embeddings derived from document chunks.

@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from app.db.models.chat_history import ChatHistory
 
+from app.db.models.chat_history import ChatHistory
 
 HISTORY_LIMIT = 6  # last 6 messages only
 

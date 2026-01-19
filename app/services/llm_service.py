@@ -1,8 +1,10 @@
 from openai import OpenAI
+
 from app.core.config import settings
 
 # Load API key from environment
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
+
 
 def generate_answer(question: str, context: str) -> str:
     """
@@ -41,7 +43,6 @@ Question:
     )
 
     return response.choices[0].message.content
-
 
 # def generate_answer(*, question: str, context: str) -> str:
 #     """
