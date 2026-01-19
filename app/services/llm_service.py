@@ -1,40 +1,70 @@
-import requests
+from openai import OpenAI
+from app.core.config import settings
 
+# Load API key from environment
+client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "llama3:8b"
-
-
-def generate_answer(*, question: str, context: str) -> str:
+def generate_answer(question: str, context: str) -> str:
     """
-    Generate an answer using Ollama based on retrieved context.
+    Generate an answer strictly from retrieved document context using OpenAI.
     """
 
     prompt = f"""
-You are a helpful business assistant.
+You are an enterprise business assistant.
 
-Use ONLY the context below to answer the question.
-If the answer is not in the context, say you don't know.
+You must answer ONLY using the provided company document context.
+If the answer is not contained in the context, say:
+"I could not find this information in the uploaded documents."
 
+--------------------
 Context:
 {context}
+--------------------
 
 Question:
 {question}
+"""
 
-Answer:
-""".strip()
-
-    response = requests.post(
-        OLLAMA_URL,
-        json={
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "stream": False,
-        },
-        timeout=300,
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",  # fast + cheap + strong for RAG
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a strict document-based assistant. Never invent answers.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        temperature=0.1,
     )
 
-    response.raise_for_status()
+    return response.choices[0].message.content
 
-    return response.json()["response"].strip()
+
+# def generate_answer(*, question: str, context: str) -> str:
+#     """
+#     Generate answer using Gemini with optional RAG context.
+#     """
+
+#     prompt = f"""
+#     You are an AI assistant answering questions strictly from provided context.
+
+#     Use ONLY the context below to answer the question.
+#     If the answer is not in the context, say you don't know.
+
+#     Context:
+#     {context}
+
+#     Question:
+#     {question}
+
+#     Answer:
+#     """.strip()
+#     response = client.models.generate_content(
+#         model="gemini-2.5-flash",
+#         contents=prompt,
+#     )
+
+#     return response.text

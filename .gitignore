@@ -4,6 +4,7 @@ __pycache__/
 
 # Environments
 .env
+*.env
 .venv
 env/
 venv/
@@ -16,6 +17,11 @@ uploads/
 docker-data/
 Thumbs.db
 
+# Celery
+celerybeat-schedule
+
+# Alembic
+alembic/versions/*.pyc
 
 # Distribution / packaging
 bin/

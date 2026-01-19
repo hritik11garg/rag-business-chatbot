@@ -13,9 +13,13 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
 
-    # LLM (used later)
+    # LLM
+    # LLM_PROVIDER: str = "gemini"
+    # OPENAI_API_KEY: str | None = None
+    # GEMINI_API_KEY: str | None = None
     LLM_PROVIDER: str = "openai"
     OPENAI_API_KEY: str | None = None
+
 
     class Config:
         env_file = ".env"

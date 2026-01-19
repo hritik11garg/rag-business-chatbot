@@ -16,12 +16,9 @@ async def lifespan(app: FastAPI):
     Lifespan event handler.
     Runs once on application startup and shutdown.
     """
-
-    # --- Startup logic ---
-    Base.metadata.create_all(bind=engine)
-
+    print("App starting...")
     yield
-
+    print("App shutting down...")
     # --- Shutdown logic ---
     # (Nothing to clean up yet)
 
