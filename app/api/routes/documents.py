@@ -1,6 +1,6 @@
 import os
 from typing import List
-
+from app.use_cases.delete_document import DeleteDocumentUseCase
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -64,31 +64,13 @@ def upload_document(
 # 🗑 Delete document + vector cleanup
 # =========================================================
 @router.delete("/{document_id}", status_code=200)
-def delete_document(document_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    document = (
-        db.query(Document)
-        .filter(
-            Document.id == document_id,
-            Document.organization_id == current_user.organization_id,
-        )
-        .first()
+def delete_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    use_case = DeleteDocumentUseCase(db)
+    return use_case.execute(
+        document_id=document_id,
+        user=current_user,
     )
-
-    if not document:
-        raise HTTPException(404, "Document not found")
-
-    # Remove embeddings
-    db.execute(
-        text("DELETE FROM document_embeddings WHERE document_id = :doc_id"),
-        {"doc_id": document_id},
-    )
-
-    # Remove file
-    file_path = os.path.join("uploads", f"org_{current_user.organization_id}", document.filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
-    db.delete(document)
-    db.commit()
-
-    return {"message": "Document and embeddings deleted successfully"}
