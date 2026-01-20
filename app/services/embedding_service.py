@@ -1,67 +1,43 @@
 from typing import List
-
-from sentence_transformers import SentenceTransformer
-from sqlalchemy import text
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.db.models.document import Document
 from app.db.models.embedding import DocumentEmbedding
-
-# Load model once (IMPORTANT: do NOT reload per request)
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-
-
-def generate_embeddings(chunks: List[str]) -> List[List[float]]:
-    """
-    Generate vector embeddings for a list of text chunks.
-    """
-    return embedding_model.encode(
-        chunks,
-        convert_to_numpy=True,
-        normalize_embeddings=True
-    ).tolist()
+from app.domain.embedding_service import EmbeddingService
 
 
 def store_embeddings(
-        db: Session,
-        *,
-        organization_id: int,
-        document: Document,
-        chunks: List[str],
+    db: Session,
+    *,
+    organization_id: int,
+    document: Document,
+    chunks: List[str],
+    embedding_service: EmbeddingService,
 ):
-    """
-    Generate embeddings and store them in the database.
-    """
+    embeddings = embedding_service.embed_texts(chunks)
 
-    embeddings = generate_embeddings(chunks)
-
-    records = []
-    for chunk_text, vector in zip(chunks, embeddings):
-        records.append(
-            DocumentEmbedding(
-                organization_id=organization_id,
-                document_id=document.id,
-                content=chunk_text,
-                embedding=vector,
-            )
+    records = [
+        DocumentEmbedding(
+            organization_id=organization_id,
+            document_id=document.id,
+            content=chunk,
+            embedding=vector,
         )
+        for chunk, vector in zip(chunks, embeddings)
+    ]
 
     db.bulk_save_objects(records)
     db.commit()
 
 
 def similarity_search(
-        db: Session,
-        *,
-        organization_id: int,
-        query_embedding: list[float],
-        limit: int = 5,
+    db: Session,
+    *,
+    organization_id: int,
+    query_embedding: List[float],
+    limit: int = 5,
 ):
-    """
-    Perform vector similarity search using pgvector.
-    Returns top matching document chunks.
-    """
-
     sql = text(
         """
         SELECT de.content, de.document_id, d.filename,
@@ -74,7 +50,7 @@ def similarity_search(
         """
     )
 
-    results = db.execute(
+    return db.execute(
         sql,
         {
             "org_id": organization_id,
@@ -82,43 +58,3 @@ def similarity_search(
             "limit": limit,
         },
     ).fetchall()
-
-    return results
-
-
-def embed_query(text: str) -> list[float]:
-    """
-    Generate embedding for a user query.
-    """
-    return embedding_model.encode(
-        text,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-    ).tolist()
-
-
-def store_generated_faq_embeddings(
-        db,
-        *,
-        organization_id: int,
-        document_id: int,
-        faqs: list[dict],
-):
-    """
-    Store AI-generated FAQ embeddings derived from document chunks.
-    """
-
-    texts = [f"Q: {f['question']} A: {f['answer']}" for f in faqs]
-    vectors = generate_embeddings(texts)
-
-    for text, vector in zip(texts, vectors):
-        db.add(
-            DocumentEmbedding(
-                organization_id=organization_id,
-                document_id=document_id,
-                content=text,
-                embedding=vector,
-            )
-        )
-
-    db.commit()

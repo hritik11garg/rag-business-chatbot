@@ -2,7 +2,10 @@ from sqlalchemy.orm import Session
 from app.db.models.user import User
 
 from app.services.chat_memory import get_recent_history, save_message
-from app.services.embedding_service import embed_query, similarity_search
+from app.infrastructure.embeddings.sentence_transformer import (
+    SentenceTransformerEmbeddingService,
+)
+from app.services.embedding_service import similarity_search
 from app.services.llm_service import generate_answer
 from app.services.confidence import evaluate_confidence
 
@@ -13,7 +16,9 @@ class ChatWithKnowledgeBaseUseCase:
 
     def execute(self, *, question: str, user: User) -> dict:
         # Step 1: Embed query
-        query_embedding = embed_query(question)
+        embedding_service = SentenceTransformerEmbeddingService()
+
+        query_embedding = embedding_service.embed_query(question)
 
         # Step 2: Retrieve relevant chunks
         matches = similarity_search(
