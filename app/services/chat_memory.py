@@ -1,27 +1,23 @@
 from sqlalchemy.orm import Session
 
-from app.db.models.chat_history import ChatHistory
-
-HISTORY_LIMIT = 6  # last 6 messages only
+from app.infrastructure.db.chat_history_repository import DBChatHistoryRepository
 
 
 def get_recent_history(db: Session, *, user_id: int):
-    return (
-        db.query(ChatHistory)
-        .filter(ChatHistory.user_id == user_id)
-        .order_by(ChatHistory.created_at.desc())
-        .limit(HISTORY_LIMIT)
-        .all()[::-1]
-    )
+    return DBChatHistoryRepository(db).get_recent_history(user_id=user_id)
 
 
-def save_message(db: Session, *, user_id: int, organization_id: int, role: str, message: str):
-    db.add(
-        ChatHistory(
-            user_id=user_id,
-            organization_id=organization_id,
-            role=role,
-            message=message,
-        )
+def save_message(
+    db: Session,
+    *,
+    user_id: int,
+    organization_id: int,
+    role: str,
+    message: str,
+):
+    DBChatHistoryRepository(db).save_message(
+        user_id=user_id,
+        organization_id=organization_id,
+        role=role,
+        message=message,
     )
-    db.commit()
