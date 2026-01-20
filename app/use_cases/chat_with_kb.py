@@ -2,25 +2,23 @@ from sqlalchemy.orm import Session
 from app.db.models.user import User
 
 from app.services.chat_memory import get_recent_history, save_message
+from app.services.embedding_service import similarity_search
 from app.infrastructure.embeddings.sentence_transformer import (
     SentenceTransformerEmbeddingService,
 )
-from app.services.embedding_service import similarity_search
-from app.services.llm_service import generate_answer
+from app.infrastructure.llm.openai_llm import OpenAILLMService
 from app.services.confidence import evaluate_confidence
 
 
 class ChatWithKnowledgeBaseUseCase:
     def __init__(self, db: Session):
         self.db = db
+        self.embedding_service = SentenceTransformerEmbeddingService()
+        self.llm_service = OpenAILLMService()
 
     def execute(self, *, question: str, user: User) -> dict:
-        # Step 1: Embed query
-        embedding_service = SentenceTransformerEmbeddingService()
+        query_embedding = self.embedding_service.embed_query(question)
 
-        query_embedding = embedding_service.embed_query(question)
-
-        # Step 2: Retrieve relevant chunks
         matches = similarity_search(
             db=self.db,
             organization_id=user.organization_id,
@@ -36,7 +34,6 @@ class ChatWithKnowledgeBaseUseCase:
                 "sources": [],
             }
 
-        # Step 3: Build context
         context = "\n\n".join([row.content for row in matches])
 
         history = get_recent_history(self.db, user_id=user.id)
@@ -52,8 +49,7 @@ Knowledge base context:
 {context}
 """
 
-        # Step 4: Generate answer
-        answer = generate_answer(
+        answer = self.llm_service.generate_answer(
             question=question,
             context=full_context,
         )
@@ -64,7 +60,6 @@ Knowledge base context:
             context=context,
         )
 
-        # Step 5: Save messages
         save_message(
             self.db,
             user_id=user.id,
