@@ -1,0 +1,9 @@
+# Formatting & linting
+black==24.4.2
+ruff==0.6.8
+
+# Typing
+mypy==1.11.2
+
+# Debugging / REPL
+ipython==8.26.0
