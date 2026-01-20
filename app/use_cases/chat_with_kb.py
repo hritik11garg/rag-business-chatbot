@@ -1,21 +1,24 @@
-from sqlalchemy.orm import Session
 from app.db.models.user import User
-
 from app.services.embedding_service import similarity_search
-from app.infrastructure.embeddings.sentence_transformer import (
-    SentenceTransformerEmbeddingService,
-)
-from app.infrastructure.llm.openai_llm import OpenAILLMService
-from app.infrastructure.db.chat_history_repository import DBChatHistoryRepository
+from app.domain.embedding_service import EmbeddingService
+from app.domain.llm_service import LLMService
+from app.domain.chat_history_repository import ChatHistoryRepository
 from app.services.confidence import evaluate_confidence
 
 
 class ChatWithKnowledgeBaseUseCase:
-    def __init__(self, db: Session):
+    def __init__(
+        self,
+        *,
+        embedding_service: EmbeddingService,
+        llm_service: LLMService,
+        chat_history: ChatHistoryRepository,
+        db,
+    ):
+        self.embedding_service = embedding_service
+        self.llm_service = llm_service
+        self.chat_history = chat_history
         self.db = db
-        self.embedding_service = SentenceTransformerEmbeddingService()
-        self.llm_service = OpenAILLMService()
-        self.chat_history = DBChatHistoryRepository(db)
 
     def execute(self, *, question: str, user: User) -> dict:
         query_embedding = self.embedding_service.embed_query(question)
