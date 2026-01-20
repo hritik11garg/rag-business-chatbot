@@ -9,7 +9,8 @@ __pycache__/
 env/
 venv/
 ENV/
-
+!.env.example
+project.zip
 
 .cache/
 **/.cache/
