@@ -5,31 +5,33 @@ allows organizations to upload internal documents (PDFs) and interact
 with them through an AI chatbot powered by semantic search, vector
 embeddings, background workers, and cloud LLMs.
 
-This project simulates how modern enterprise AI assistants used in SaaS
-platforms, support portals, and internal knowledge tools are built ---
-combining document ingestion, embeddings, vector databases, async
-workers, and grounded LLM responses.
+Built **from scratch — no LangChain** — combining document ingestion,
+embeddings, pgvector similarity search, async workers, and grounded
+LLM responses, the way modern enterprise AI assistants in SaaS
+platforms and internal knowledge tools are built.
+
+**Stack:** FastAPI · PostgreSQL + pgvector · Redis + Celery · Sentence Transformers (MiniLM) · OpenAI API · SQLAlchemy + Alembic · Docker
 
 ------------------------------------------------------------------------
 
 # 🚀 Core Capabilities
 
--   Multi-tenant architecture (organization-isolated data)
--   JWT Authentication with secure login
--   Organization-scoped document uploads
--   Enterprise PDF validation
--   Duplicate filename versioning (safe re-uploads)
--   Automatic document chunking
--   Sentence Transformer embeddings (MiniLM)
--   pgvector semantic similarity search
--   Synthetic FAQ generation (Celery background)
--   Conversational chat memory
--   Cloud LLM answering via OpenAI API
--   Source citations with answers
--   Confidence scoring for every response
--   Background workers via Celery + Redis
--   Alembic database migrations
--   Document deletion with vector cleanup
+- Multi-tenant architecture (organization-isolated data at every query)
+- JWT authentication (OAuth2 password flow)
+- Organization-scoped PDF uploads with integrity validation
+- Duplicate filename versioning (safe re-uploads)
+- Automatic text extraction, cleaning, and overlapping chunking
+- Sentence Transformer embeddings (all-MiniLM-L6-v2, 384-dim)
+- pgvector semantic similarity search
+- Intent routing — chitchat handled instantly, knowledge questions go
+  through the full RAG pipeline
+- Synthetic FAQ generation as a Celery background task (retrieval boost)
+- Conversational chat memory (recent history injected into the prompt)
+- Grounded answers via OpenAI API with source citations
+- LLM-graded confidence score (high / medium / low) on every response
+- Document deletion with vector + file cleanup
+- Alembic database migrations
+- Pytest test suite for the chat use cases
 
 ------------------------------------------------------------------------
 
@@ -59,151 +61,158 @@ workers, and grounded LLM responses.
 
 ------------------------------------------------------------------------
 
-# 🏗 Detailed Flow
+# 🏛 Code Architecture (SOLID / Hexagonal)
+
+The codebase follows a layered, dependency-inverted design:
+
+    app/
+    ├── api/             # FastAPI routes, schemas, auth dependencies
+    ├── domain/          # Protocols (LLMService, EmbeddingService,
+    │                    #   ChatHistoryRepository, IntentClassifier)
+    ├── infrastructure/  # Implementations: OpenAI client, Sentence
+    │                    #   Transformers, DB-backed chat history
+    ├── use_cases/       # Business logic: chat routing, RAG chat,
+    │                    #   upload, delete, signup, chitchat
+    ├── composition/     # Dependency wiring (composition root)
+    ├── services/        # Document processing, embedding store/search,
+    │                    #   confidence scoring, FAQ generation
+    ├── tasks/           # Celery background tasks
+    ├── db/              # SQLAlchemy models + session
+    └── core/            # Settings, security (JWT/bcrypt), Celery app
+
+Use cases depend on **Protocols**, not concrete providers — swapping
+OpenAI for another LLM or MiniLM for another embedder is a small
+adapter in `infrastructure/`, with zero changes to business logic.
+
+------------------------------------------------------------------------
+
+# 🏗 Pipelines
 
 ## Document Upload Pipeline
 
-1.  User uploads PDF under their organization
+1.  User uploads a PDF under their organization
 2.  Backend validates PDF integrity & format
 3.  Duplicate filenames auto-versioned
-4.  File stored in org-specific folder
+4.  File stored in an org-specific folder (`uploads/org_<id>/`)
 5.  Metadata saved to Postgres
-6.  Text extracted using PyPDF
-7.  Text normalized & cleaned
-8.  Document split into overlapping chunks
-9.  Embeddings generated via MiniLM
-10. Stored in pgvector with org scope
-11. Celery task triggered for FAQ generation
-12. FAQs embedded & stored for retrieval boost
-
-------------------------------------------------------------------------
+6.  Text extracted (pypdf), normalized, and split into overlapping chunks
+7.  Chunk embeddings generated via MiniLM and stored in pgvector
+8.  Celery task generates synthetic FAQs, embedded & stored for
+    retrieval boosting
 
 ## Chat Pipeline
 
-1.  User asks question
-2.  Question embedded via MiniLM
-3.  Similarity search within org embeddings
-4.  Top chunks + FAQs retrieved
-5.  Recent chat history loaded
-6.  Prompt constructed with context + memory
-7.  Sent to OpenAI API
-8.  Grounded answer generated
-9.  Response includes:
-    -   Answer
-    -   Sources
-    -   Confidence score
+1.  Intent classified — greetings get an instant chitchat reply
+2.  Knowledge questions are embedded via MiniLM
+3.  Similarity search over the organization's embeddings (top 5)
+4.  Recent chat history loaded
+5.  Prompt constructed from context + memory
+6.  Grounded answer generated by the OpenAI API
+7.  Response returns the **answer**, **source filenames**, and an
+    LLM-evaluated **confidence score**
 
 ------------------------------------------------------------------------
 
-# 🐘 Database Usage
+# 🔌 API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/auth/signup` | Create an organization + first user |
+| `POST` | `/auth/login` | OAuth2 login → JWT access token |
+| `GET` | `/me` | Current authenticated user |
+| `GET` | `/documents` | List the organization's documents |
+| `POST` | `/documents/upload` | Upload a PDF (triggers full RAG ingestion) |
+| `DELETE` | `/documents/{id}` | Delete a document + its vectors + file |
+| `POST` | `/chat` | Ask a question (RAG answer + sources + confidence) |
+| `GET` | `/health` | Health check |
+
+Interactive docs: **http://127.0.0.1:8000/docs**
+
+------------------------------------------------------------------------
+
+# 🐘 Database Schema
 
   Table                 Purpose
   --------------------- -------------------------------------
   users                 Organization users & authentication
   organizations         Multi-tenant isolation
   documents             Uploaded PDF metadata
-  document_embeddings   Chunk vectors + FAQ vectors
+  document_embeddings   Chunk vectors + FAQ vectors (384-dim)
   chat_history          Conversation memory
 
 ------------------------------------------------------------------------
 
-# 🔁 Background Processing (Celery)
+# 🔍 Why pgvector Instead of Pinecone/FAISS?
 
--   Handles heavy AI tasks asynchronously
--   Generates synthetic FAQs
--   Prevents blocking API requests
--   Runs independently from FastAPI
--   Uses Redis as broker
--   Production-style architecture pattern
+- Fully local & open-source, embedded inside Postgres
+- Vectors live next to the relational data they belong to —
+  org-scoped filtering is a plain SQL `WHERE` clause
+- No external SaaS dependency; production-safe & scalable
 
 ------------------------------------------------------------------------
 
-# 🔍 Why pgvector Instead of Pinecone?
+# ⚙ Setup
 
--   Fully local & open-source
--   Embedded inside Postgres
--   No external SaaS dependency
--   Ideal for controlled enterprise RAG
--   Production-safe & scalable
+**Full step-by-step guide: [SETUP.md](SETUP.md)** — includes
+prerequisites, environment variables, database initialization, and
+troubleshooting.
 
-------------------------------------------------------------------------
+Quick version:
 
-# 🤖 LLM Provider
+```bash
+# 1. Environment
+python -m venv venv && venv\Scripts\activate      # Windows
+pip install -r requirements/base.txt
+copy .env.example .env                             # then edit values
 
-Previously: Ollama (local inference) Now: OpenAI API (cloud production)
+# 2. Infrastructure (Postgres + pgvector, Redis)
+docker compose up -d
+docker exec rag-postgres psql -U raguser -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
--   Faster
--   Better reasoning quality
--   Enterprise-standard architecture
--   Real SaaS-style deployment pattern
+# 3. Database tables — see SETUP.md step 6 (the shipped initial
+#    migration is empty; create tables from the models, then stamp)
 
-------------------------------------------------------------------------
+# 4. Run (two terminals)
+celery -A app.core.celery_app:celery worker --pool=solo -Q rag-queue --loglevel=info
+uvicorn app.main:app --reload
+```
 
-# ⚙ Setup Requirements
+> ⏱ First startup takes ~40s (torch / sentence-transformers imports),
+> and the first embedding call downloads the MiniLM model.
 
-## 1. Docker Postgres with pgvector
-
-docker run -d\
---name rag-postgres\
--p 5433:5432\
--e POSTGRES_USER=raguser\
--e POSTGRES_PASSWORD=ragpass\
--e POSTGRES_DB=ragdb\
-ankane/pgvector
-
-Enable extension:
-
-CREATE EXTENSION IF NOT EXISTS vector;
+Dependencies are split under `requirements/`:
+`base.txt` (runtime) · `test.txt` (pytest) · `dev.txt` (black, ruff, mypy).
 
 ------------------------------------------------------------------------
 
-## 2. Docker Redis (Celery Broker)
+# 🧪 Tests
 
-docker run -d -p 6379:6379 --name rag-redis redis
+```bash
+pip install -r requirements/test.txt
+pytest
+```
 
-------------------------------------------------------------------------
-
-## 3. Alembic Migration
-
-alembic upgrade head
-
-------------------------------------------------------------------------
-
-# ▶ Running Project
-
-docker start rag-postgres docker start rag-redis
-venv`\Scripts`{=tex}`\activate`{=tex} celery -A
-app.core.celery_app:celery worker --pool=solo -Q rag-queue
---loglevel=info uvicorn app.main:app --reload
-
-Swagger:
-
-http://127.0.0.1:8000/docs
+Covers the chat router (intent dispatch) and the RAG chat use case
+(with fakes injected via the domain Protocols).
 
 ------------------------------------------------------------------------
 
-# 🧠 AI Enhancements Implemented
+# 🗺 Roadmap
 
-  Feature              Benefit
-  -------------------- ---------------------------
-  Vector Search        Semantic retrieval
-  Synthetic FAQs       Retrieval boosting
-  Memory               Conversational continuity
-  Async Workers        Production reliability
-  Grounded LLM         Prevent hallucinations
-  Citations            Trust & explainability
-  Confidence Scoring   Reliability indicator
+- Multi-provider LLM support (Gemini / Groq / local Ollama)
+- Startup-time model loading & HNSW vector indexing
+- Configurable top-k retrieval + metadata filtering
+- Prompt templating module
+- Held-out eval harness (hallucination-rate measurement)
+- Load benchmarks (Locust), CI pipeline, streaming responses
 
 ------------------------------------------------------------------------
 
 # 🏆 Enterprise Value
 
-This project mirrors how companies build:
-
--   Internal AI assistants
--   Customer support bots
--   Private enterprise search
--   Knowledge retrieval platforms
+This project mirrors how companies build internal AI assistants,
+customer support bots, private enterprise search, and knowledge
+retrieval platforms.
 
 Perfect for: ✔ Portfolio ✔ Freelancing ✔ Backend/AI Interviews
 

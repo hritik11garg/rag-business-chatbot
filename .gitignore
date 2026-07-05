@@ -62,3 +62,12 @@ site/
 *.log
 *.sqlite
 db.sqlite3
+
+# Claude Code (AI assistant) - never commit these
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.claude-*
+**/.claude/
+
+UPGRADE_PLAN.md
