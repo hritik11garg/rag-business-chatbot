@@ -71,3 +71,6 @@ CLAUDE.local.md
 **/.claude/
 
 UPGRADE_PLAN.md
+
+# Learning notes (local only, never commit)
+learn/

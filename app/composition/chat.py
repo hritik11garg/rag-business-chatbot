@@ -8,14 +8,14 @@ from app.domain.intent_classifier import IntentClassifier
 from app.infrastructure.embeddings.sentence_transformer import (
     SentenceTransformerEmbeddingService,
 )
-from app.infrastructure.llm.openai_llm import OpenAILLMService
+from app.infrastructure.llm.factory import build_llm_service
 from app.infrastructure.db.chat_history_repository import DBChatHistoryRepository
 
 
 def build_chat_router_use_case(db: Session) -> ChatRouterUseCase:
     knowledge_uc = ChatWithKnowledgeBaseUseCase(
         embedding_service=SentenceTransformerEmbeddingService(),
-        llm_service=OpenAILLMService(),
+        llm_service=build_llm_service(),
         chat_history=DBChatHistoryRepository(db),
         db=db,
     )

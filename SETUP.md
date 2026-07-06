@@ -68,9 +68,26 @@ Edit `.env` so it matches the Docker database credentials below:
 ENV=development
 SECRET_KEY=<any-long-random-string>
 DATABASE_URL=postgresql://raguser:ragpass@localhost:5433/ragdb
-OPENAI_API_KEY=sk-<your-real-key>
-LLM_PROVIDER=openai
+
+# Pick ONE provider: openai | groq | gemini | ollama | anthropic
+LLM_PROVIDER=groq
+GROQ_API_KEY=gsk_<your-real-key>
 ```
+
+Set the API key that matches your provider — `OPENAI_API_KEY`,
+`GROQ_API_KEY`, `GEMINI_API_KEY`, or `ANTHROPIC_API_KEY`
+(`ollama` runs locally and needs no key). Where to get a free key:
+
+| Provider | Key page | Notes |
+|---|---|---|
+| `groq` | console.groq.com | Free tier, very fast Llama models |
+| `gemini` | aistudio.google.com | Free tier |
+| `ollama` | — (install from ollama.com, then `ollama pull llama3.2`) | Fully local |
+| `openai` | platform.openai.com | Paid |
+| `anthropic` | console.anthropic.com | Paid (Claude) |
+
+Optional `.env` overrides: `LLM_MODEL`, `LLM_BASE_URL`, `LLM_TEMPERATURE`
+(defaults per provider live in `app/infrastructure/llm/factory.py`).
 
 Generate a good SECRET_KEY:
 
@@ -193,6 +210,6 @@ uvicorn app.main:app --reload
 | `type "vector" does not exist` | Step 5 was skipped — enable the pgvector extension |
 | Tables missing / `relation does not exist` | Step 6 was skipped — the shipped migration is empty; use `create_all` |
 | Celery tasks never run | Redis not running, or worker not started with `-Q rag-queue` |
-| OpenAI auth error | `OPENAI_API_KEY` missing/wrong in `.env` |
+| LLM auth error / `RuntimeError: ... is not set` | The API key matching `LLM_PROVIDER` is missing/wrong in `.env` |
 | Port 5433 or 6379 already in use | Stop the conflicting service or change the port mapping in `docker-compose.yml` |
 | Slow first chat/upload | Normal — sentence-transformers downloads the MiniLM model on first use |
