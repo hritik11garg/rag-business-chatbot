@@ -31,6 +31,34 @@ def store_embeddings(
     db.commit()
 
 
+def store_generated_faq_embeddings(
+    db: Session,
+    *,
+    organization_id: int,
+    document_id: int,
+    faqs: List[dict],
+    embedding_service: EmbeddingService,
+):
+    """
+    Store AI-generated FAQ embeddings derived from document chunks.
+    """
+    texts = [f"Q: {f['question']} A: {f['answer']}" for f in faqs]
+    embeddings = embedding_service.embed_texts(texts)
+
+    records = [
+        DocumentEmbedding(
+            organization_id=organization_id,
+            document_id=document_id,
+            content=text,
+            embedding=vector,
+        )
+        for text, vector in zip(texts, embeddings)
+    ]
+
+    db.bulk_save_objects(records)
+    db.commit()
+
+
 def similarity_search(
     db: Session,
     *,

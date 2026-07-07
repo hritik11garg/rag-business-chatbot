@@ -43,6 +43,9 @@ def generate_and_store_faqs(chunks, document_id, organization_id):
 
     from app.db.session import SessionLocal
     from app.services.embedding_service import store_generated_faq_embeddings
+    from app.infrastructure.embeddings.sentence_transformer import (
+        SentenceTransformerEmbeddingService,
+    )
 
     db = SessionLocal()
 
@@ -57,6 +60,7 @@ def generate_and_store_faqs(chunks, document_id, organization_id):
             organization_id=organization_id,
             document_id=document_id,
             faqs=all_faqs,
+            embedding_service=SentenceTransformerEmbeddingService(),
         )
 
     db.close()
