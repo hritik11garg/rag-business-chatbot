@@ -170,10 +170,9 @@ copy .env.example .env                             # then edit values
 
 # 2. Infrastructure (Postgres + pgvector, Redis)
 docker compose up -d
-docker exec rag-postgres psql -U raguser -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
-# 3. Database tables — see SETUP.md step 6 (the shipped initial
-#    migration is empty; create tables from the models, then stamp)
+# 3. Database tables (the migration also enables the pgvector extension)
+alembic upgrade head
 
 # 4. Run (two terminals)
 celery -A app.core.celery_app:celery worker --pool=solo -Q rag-queue --loglevel=info

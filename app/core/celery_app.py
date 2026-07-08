@@ -1,9 +1,11 @@
 from celery import Celery
 
+from app.core.config import settings
+
 celery = Celery(
     "ragbot",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0",
+    broker=settings.CELERY_BROKER_URL,
+    backend=settings.CELERY_RESULT_BACKEND,
 )
 
 # Force Celery to import your task module

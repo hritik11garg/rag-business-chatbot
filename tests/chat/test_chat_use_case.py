@@ -38,20 +38,15 @@ def fake_similarity_search(*, db, organization_id, query_embedding, limit):
     ]
 
 
-def fake_evaluate_confidence(*, question, answer, context):
-    return "high"
+class FakeConfidenceEvaluator:
+    def evaluate(self, *, question, answer, context):
+        return "high"
 
 
 def test_chat_returns_company_description(monkeypatch):
     monkeypatch.setattr(
         "app.use_cases.chat_with_kb.similarity_search",
         fake_similarity_search,
-    )
-    # evaluate_confidence still reaches a real LLM internally (DI bypass,
-    # scheduled for Phase 2) — fake it so the test never leaves the process
-    monkeypatch.setattr(
-        "app.use_cases.chat_with_kb.evaluate_confidence",
-        fake_evaluate_confidence,
     )
 
     user = User(
@@ -65,6 +60,7 @@ def test_chat_returns_company_description(monkeypatch):
     use_case = ChatWithKnowledgeBaseUseCase(
         embedding_service=FakeEmbeddingService(),
         llm_service=FakeLLMService(),
+        confidence_evaluator=FakeConfidenceEvaluator(),
         chat_history=FakeChatHistoryRepository(),
         db=None,
     )

@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
 
+    # Background jobs (Celery)
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
+
     # LLM provider: openai | groq | gemini | ollama | anthropic
     LLM_PROVIDER: str = "openai"
 

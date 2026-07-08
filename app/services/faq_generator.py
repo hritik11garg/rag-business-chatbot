@@ -1,7 +1,7 @@
-from app.services.llm_service import generate_answer
+from app.domain.llm_service import LLMService
 
 
-def generate_faqs_from_chunk(chunk: str) -> list[dict]:
+def generate_faqs_from_chunk(chunk: str, *, llm_service: LLMService) -> list[dict]:
     """
     Uses the LLM to generate FAQ-style Q&A pairs from a document chunk.
     """
@@ -26,7 +26,7 @@ def generate_faqs_from_chunk(chunk: str) -> list[dict]:
     {chunk}
     """
 
-    response = generate_answer(question=prompt, context="")
+    response = llm_service.generate_answer(question=prompt, context="")
 
     try:
         import json
@@ -46,12 +46,14 @@ def generate_and_store_faqs(chunks, document_id, organization_id):
     from app.infrastructure.embeddings.sentence_transformer import (
         SentenceTransformerEmbeddingService,
     )
+    from app.infrastructure.llm.factory import build_llm_service
 
     db = SessionLocal()
+    llm_service = build_llm_service()
 
     all_faqs = []
     for chunk in chunks:
-        faqs = generate_faqs_from_chunk(chunk)
+        faqs = generate_faqs_from_chunk(chunk, llm_service=llm_service)
         all_faqs.extend(faqs)
 
     if all_faqs:

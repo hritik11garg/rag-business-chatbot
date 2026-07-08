@@ -122,30 +122,23 @@ docker ps
 
 ## 5. Enable the pgvector extension
 
-Required once, before creating tables:
+Nothing to do — the initial Alembic migration runs
+`CREATE EXTENSION IF NOT EXISTS vector` before creating tables.
 
-```powershell
-docker exec rag-postgres psql -U raguser -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector;"
-```
+(To enable it manually anyway:
+`docker exec rag-postgres psql -U raguser -d ragdb -c "CREATE EXTENSION IF NOT EXISTS vector;"`)
 
 ---
 
 ## 6. Create the database tables
 
-> ⚠️ **Note:** the committed initial Alembic migration
-> (`alembic/versions/c828c473e937_initial_schema.py`) is **empty** — its
-> `upgrade()` is a `pass`. Running only `alembic upgrade head` will NOT
-> create any tables. Create the schema from the SQLAlchemy models
-> instead, then stamp Alembic so future migrations have the correct
-> baseline:
-
 ```powershell
-python -c "from app.db.session import engine; from app.db.base import Base; from app.db import models; Base.metadata.create_all(bind=engine); print('Tables:', sorted(Base.metadata.tables))"
-alembic stamp head
+alembic upgrade head
 ```
 
 Expected tables: `users`, `organizations`, `documents`,
-`document_embeddings`, `chat_history`.
+`document_embeddings`, `chat_history` (plus Alembic's own
+`alembic_version`).
 
 ---
 
@@ -208,7 +201,7 @@ uvicorn app.main:app --reload
 |---|---|
 | `connection refused` on DB | Docker not running, or postgres not up — `docker compose up -d`, check `docker logs rag-postgres` |
 | `type "vector" does not exist` | Step 5 was skipped — enable the pgvector extension |
-| Tables missing / `relation does not exist` | Step 6 was skipped — the shipped migration is empty; use `create_all` |
+| Tables missing / `relation does not exist` | Step 6 was skipped — run `alembic upgrade head` |
 | Celery tasks never run | Redis not running, or worker not started with `-Q rag-queue` |
 | LLM auth error / `RuntimeError: ... is not set` | The API key matching `LLM_PROVIDER` is missing/wrong in `.env` |
 | Port 5433 or 6379 already in use | Stop the conflicting service or change the port mapping in `docker-compose.yml` |

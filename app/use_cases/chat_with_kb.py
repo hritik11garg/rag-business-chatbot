@@ -3,7 +3,7 @@ from app.services.embedding_service import similarity_search
 from app.domain.embedding_service import EmbeddingService
 from app.domain.llm_service import LLMService
 from app.domain.chat_history_repository import ChatHistoryRepository
-from app.services.confidence import evaluate_confidence
+from app.services.confidence import ConfidenceEvaluator
 
 
 class ChatWithKnowledgeBaseUseCase:
@@ -12,11 +12,13 @@ class ChatWithKnowledgeBaseUseCase:
         *,
         embedding_service: EmbeddingService,
         llm_service: LLMService,
+        confidence_evaluator: ConfidenceEvaluator,
         chat_history: ChatHistoryRepository,
         db,
     ):
         self.embedding_service = embedding_service
         self.llm_service = llm_service
+        self.confidence_evaluator = confidence_evaluator
         self.chat_history = chat_history
         self.db = db
 
@@ -58,7 +60,7 @@ Knowledge base context:
             context=full_context,
         )
 
-        confidence = evaluate_confidence(
+        confidence = self.confidence_evaluator.evaluate(
             question=question,
             answer=answer,
             context=context,
