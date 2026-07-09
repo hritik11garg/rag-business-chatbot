@@ -1,6 +1,12 @@
 from openai import OpenAI
 
-from app.infrastructure.llm.prompts import SYSTEM_PROMPT, build_rag_prompt
+from app.domain.llm_service import GroundedAnswer
+from app.infrastructure.llm.prompts import (
+    SYSTEM_PROMPT,
+    build_grounded_rag_prompt,
+    build_rag_prompt,
+    parse_grounded_answer,
+)
 
 
 class OpenAICompatibleLLMService:
@@ -36,3 +42,21 @@ class OpenAICompatibleLLMService:
             temperature=self.temperature,
         )
         return response.choices[0].message.content
+
+    def generate_grounded_answer(
+        self, *, question: str, context: str
+    ) -> GroundedAnswer:
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": build_grounded_rag_prompt(
+                        question=question, context=context
+                    ),
+                },
+            ],
+            temperature=self.temperature,
+        )
+        return parse_grounded_answer(response.choices[0].message.content)

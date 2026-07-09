@@ -1,6 +1,12 @@
 from anthropic import Anthropic
 
-from app.infrastructure.llm.prompts import SYSTEM_PROMPT, build_rag_prompt
+from app.domain.llm_service import GroundedAnswer
+from app.infrastructure.llm.prompts import (
+    SYSTEM_PROMPT,
+    build_grounded_rag_prompt,
+    build_rag_prompt,
+    parse_grounded_answer,
+)
 
 
 class AnthropicLLMService:
@@ -29,3 +35,22 @@ class AnthropicLLMService:
             temperature=self.temperature,
         )
         return response.content[0].text
+
+    def generate_grounded_answer(
+        self, *, question: str, context: str
+    ) -> GroundedAnswer:
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=[
+                {
+                    "role": "user",
+                    "content": build_grounded_rag_prompt(
+                        question=question, context=context
+                    ),
+                }
+            ],
+            temperature=self.temperature,
+        )
+        return parse_grounded_answer(response.content[0].text)

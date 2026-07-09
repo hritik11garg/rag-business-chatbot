@@ -1,3 +1,4 @@
+from app.domain.llm_service import GroundedAnswer
 from app.use_cases.chat_with_kb import ChatWithKnowledgeBaseUseCase
 from app.db.models.user import User
 
@@ -10,6 +11,14 @@ class FakeEmbeddingService:
 class FakeLLMService:
     def generate_answer(self, *, question: str, context: str) -> str:
         return "Acme Corp is a software company providing SaaS products."
+
+    def generate_grounded_answer(
+        self, *, question: str, context: str
+    ) -> GroundedAnswer:
+        return GroundedAnswer(
+            answer="Acme Corp is a software company providing SaaS products.",
+            confidence="high",
+        )
 
 
 class FakeChatHistoryRepository:
@@ -38,11 +47,6 @@ def fake_similarity_search(*, db, organization_id, query_embedding, limit):
     ]
 
 
-class FakeConfidenceEvaluator:
-    def evaluate(self, *, question, answer, context):
-        return "high"
-
-
 def test_chat_returns_company_description(monkeypatch):
     monkeypatch.setattr(
         "app.use_cases.chat_with_kb.similarity_search",
@@ -60,7 +64,6 @@ def test_chat_returns_company_description(monkeypatch):
     use_case = ChatWithKnowledgeBaseUseCase(
         embedding_service=FakeEmbeddingService(),
         llm_service=FakeLLMService(),
-        confidence_evaluator=FakeConfidenceEvaluator(),
         chat_history=FakeChatHistoryRepository(),
         db=None,
     )

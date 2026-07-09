@@ -2,9 +2,7 @@ import os
 from sqlalchemy.orm import Session
 from fastapi import UploadFile, HTTPException
 
-from app.infrastructure.embeddings.sentence_transformer import (
-    SentenceTransformerEmbeddingService,
-)
+from app.domain.embedding_service import EmbeddingService
 from app.db.models.document import Document
 from app.db.models.user import User
 from app.services.document_processing import (
@@ -24,9 +22,9 @@ class UploadDocumentUseCase:
     Handles document upload + ingestion into the RAG system.
     """
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, *, embedding_service: EmbeddingService):
         self.db = db
-        self.embedding_service = SentenceTransformerEmbeddingService()
+        self.embedding_service = embedding_service
 
     def execute(self, *, file: UploadFile, user: User) -> dict:
         if file.content_type != "application/pdf":

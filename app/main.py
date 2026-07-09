@@ -4,6 +4,7 @@ from fastapi import FastAPI, Depends
 
 from app.api.deps import get_current_user
 from app.api.routes import auth, documents, chat
+from app.composition.singletons import get_embedding_service, get_llm_service
 from app.core.config import settings
 from app.db import models  # noqa: F401
 from app.db.models.user import User
@@ -16,6 +17,11 @@ async def lifespan(app: FastAPI):
     Runs once on application startup and shutdown.
     """
     print("App starting...")
+    # Warm the process-wide singletons so request #1 doesn't pay
+    # the MiniLM model load (~4s) or the LLM client construction.
+    get_embedding_service()
+    get_llm_service()
+    print("Models warmed, ready to serve.")
     yield
     print("App shutting down...")
     # --- Shutdown logic ---

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.use_cases.upload_document import UploadDocumentUseCase
+from app.composition.singletons import get_embedding_service
 from app.api.deps import get_db, get_current_user
 from app.db.models.document import Document
 from app.db.models.user import User
@@ -57,7 +58,9 @@ def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    use_case = UploadDocumentUseCase(db)
+    use_case = UploadDocumentUseCase(
+        db, embedding_service=get_embedding_service()
+    )
     return use_case.execute(file=file, user=current_user)
 
 # =========================================================

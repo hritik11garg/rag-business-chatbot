@@ -43,13 +43,10 @@ def generate_and_store_faqs(chunks, document_id, organization_id):
 
     from app.db.session import SessionLocal
     from app.services.embedding_service import store_generated_faq_embeddings
-    from app.infrastructure.embeddings.sentence_transformer import (
-        SentenceTransformerEmbeddingService,
-    )
-    from app.infrastructure.llm.factory import build_llm_service
+    from app.composition.singletons import get_embedding_service, get_llm_service
 
     db = SessionLocal()
-    llm_service = build_llm_service()
+    llm_service = get_llm_service()
 
     all_faqs = []
     for chunk in chunks:
@@ -62,7 +59,7 @@ def generate_and_store_faqs(chunks, document_id, organization_id):
             organization_id=organization_id,
             document_id=document_id,
             faqs=all_faqs,
-            embedding_service=SentenceTransformerEmbeddingService(),
+            embedding_service=get_embedding_service(),
         )
 
     db.close()
