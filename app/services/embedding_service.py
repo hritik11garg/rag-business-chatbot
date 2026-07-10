@@ -1,6 +1,6 @@
 from typing import List
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from app.db.models.document import Document
 from app.db.models.embedding import DocumentEmbedding
@@ -65,24 +65,33 @@ def similarity_search(
     organization_id: int,
     query_embedding: List[float],
     limit: int = 5,
+    document_ids: List[int] | None = None,
 ):
+    # The org filter is unconditional — tenant isolation must hold no
+    # matter what the caller passes. document_ids only narrows WITHIN
+    # the org: another org's document id simply matches nothing.
+    doc_filter = "AND de.document_id IN :doc_ids" if document_ids else ""
+
     sql = text(
-        """
+        f"""
         SELECT de.content, de.document_id, d.filename,
             (de.embedding <-> CAST(:query_embedding AS vector)) AS distance
         FROM document_embeddings de
         JOIN documents d ON d.id = de.document_id
         WHERE de.organization_id = :org_id
+        {doc_filter}
         ORDER BY de.embedding <-> CAST(:query_embedding AS vector)
         LIMIT :limit
         """
     )
 
-    return db.execute(
-        sql,
-        {
-            "org_id": organization_id,
-            "query_embedding": query_embedding,
-            "limit": limit,
-        },
-    ).fetchall()
+    params = {
+        "org_id": organization_id,
+        "query_embedding": query_embedding,
+        "limit": limit,
+    }
+    if document_ids:
+        sql = sql.bindparams(bindparam("doc_ids", expanding=True))
+        params["doc_ids"] = document_ids
+
+    return db.execute(sql, params).fetchall()

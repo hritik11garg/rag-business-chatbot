@@ -11,6 +11,7 @@ celery = Celery(
 # Force Celery to import your task module
 celery.conf.imports = (
     "app.tasks.faq_tasks",
+    "app.tasks.summary_tasks",
 )
 
 celery.conf.task_routes = {

@@ -24,17 +24,18 @@ celerybeat-schedule
 # Alembic
 alembic/versions/*.pyc
 
-# Distribution / packaging
-bin/
-build/
-develop-eggs/
-dist/
-eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
+# Distribution / packaging (root-anchored so a future app/lib or
+# scripts/bin folder is never silently ignored)
+/bin/
+/build/
+/develop-eggs/
+/dist/
+/eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
 *.egg-info/
 .installed.cfg
 *.egg
@@ -42,6 +43,7 @@ var/
 # Specific to FastAPI/Python projects
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
 htmlcov/
 .tox/
 .coverage

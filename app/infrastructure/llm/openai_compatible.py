@@ -1,10 +1,13 @@
+from typing import Iterator
+
 from openai import OpenAI
 
 from app.domain.llm_service import GroundedAnswer
-from app.infrastructure.llm.prompts import (
+from app.prompts import (
     SYSTEM_PROMPT,
     build_grounded_rag_prompt,
     build_rag_prompt,
+    build_streamed_grounded_prompt,
     parse_grounded_answer,
 )
 
@@ -60,3 +63,25 @@ class OpenAICompatibleLLMService:
             temperature=self.temperature,
         )
         return parse_grounded_answer(response.choices[0].message.content)
+
+    def stream_grounded_answer(
+        self, *, question: str, context: str
+    ) -> Iterator[str]:
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": build_streamed_grounded_prompt(
+                        question=question, context=context
+                    ),
+                },
+            ],
+            temperature=self.temperature,
+            stream=True,
+        )
+        for chunk in stream:
+            # some providers send keep-alive/usage chunks with no choices
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content

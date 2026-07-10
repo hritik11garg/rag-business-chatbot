@@ -1,4 +1,9 @@
-from app.infrastructure.llm.prompts import parse_grounded_answer
+from app.prompts import (
+    clamp_summary,
+    parse_grounded_answer,
+    split_confidence_marker,
+)
+from app.prompts.summary import SUMMARY_CHAR_LIMIT
 from app.use_cases.chat_with_kb import trim_history
 
 
@@ -55,3 +60,29 @@ def test_trim_history_drops_oldest_first():
 def test_trim_history_always_keeps_newest_even_if_over_budget():
     history = [Msg("assistant", "x" * 500)]
     assert trim_history(history, budget=50) == "ASSISTANT: " + "x" * 500
+
+
+def test_split_confidence_marker_valid():
+    answer, confidence = split_confidence_marker(
+        "The refund window is 14 days.\nCONFIDENCE: HIGH"
+    )
+    assert answer == "The refund window is 14 days."
+    assert confidence == "high"
+
+
+def test_split_confidence_marker_missing_falls_back_to_low():
+    answer, confidence = split_confidence_marker("Just an answer, no marker.")
+    assert answer == "Just an answer, no marker."
+    assert confidence == "low"
+
+
+def test_split_confidence_marker_invalid_level_keeps_text():
+    raw = "Answer.\nCONFIDENCE: VERY HIGH"
+    answer, confidence = split_confidence_marker(raw)
+    assert answer == raw
+    assert confidence == "low"
+
+
+def test_clamp_summary_enforces_limit():
+    assert len(clamp_summary("x" * 5000)) == SUMMARY_CHAR_LIMIT
+    assert clamp_summary("  short  ") == "short"

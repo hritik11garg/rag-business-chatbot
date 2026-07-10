@@ -1,38 +1,14 @@
 from app.domain.llm_service import LLMService
+from app.prompts import build_faq_generation_prompt, parse_faq_response
 
 
 def generate_faqs_from_chunk(chunk: str, *, llm_service: LLMService) -> list[dict]:
     """
     Uses the LLM to generate FAQ-style Q&A pairs from a document chunk.
     """
-
-    prompt = f"""
-    You are generating FAQs from business documentation.
-
-    From the following text, generate 3 clear customer-facing FAQ question and answer pairs.
-
-    Rules:
-    - Questions must be realistic user questions
-    - Answers must be directly based on the text
-    - Keep them short and factual
-    - Output STRICT JSON list format:
-
-    [
-    {{"question": "...", "answer": "..."}},
-    {{"question": "...", "answer": "..."}}
-    ]
-
-    Text:
-    {chunk}
-    """
-
+    prompt = build_faq_generation_prompt(chunk=chunk)
     response = llm_service.generate_answer(question=prompt, context="")
-
-    try:
-        import json
-        return json.loads(response)
-    except Exception:
-        return []
+    return parse_faq_response(response)
 
 
 def generate_and_store_faqs(chunks, document_id, organization_id):

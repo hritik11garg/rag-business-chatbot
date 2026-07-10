@@ -38,7 +38,9 @@ class FakeRetrievalResult:
         self.filename = filename
 
 
-def fake_similarity_search(*, db, organization_id, query_embedding, limit):
+def fake_similarity_search(
+    *, db, organization_id, query_embedding, limit, document_ids=None
+):
     return [
         FakeRetrievalResult(
             content="About Acme Corp. Acme Corp is a SaaS company.",

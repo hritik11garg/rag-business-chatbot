@@ -1,4 +1,5 @@
 from app.db.models.chat_history import ChatHistory
+from app.db.models.conversation_summary import ConversationSummary
 from app.db.models.document import Document
 from app.db.models.embedding import DocumentEmbedding
 from app.db.models.organization import Organization

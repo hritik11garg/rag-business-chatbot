@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Iterator, Protocol
 
 
 @dataclass(frozen=True)
@@ -21,4 +21,12 @@ class LLMService(Protocol):
     def generate_grounded_answer(
         self, *, question: str, context: str
     ) -> GroundedAnswer:
+        ...
+
+    def stream_grounded_answer(
+        self, *, question: str, context: str
+    ) -> Iterator[str]:
+        """Yield the answer as text fragments. The stream ends with a
+        CONFIDENCE marker line the caller parses off (see
+        app.prompts.split_confidence_marker)."""
         ...

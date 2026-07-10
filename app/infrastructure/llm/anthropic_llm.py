@@ -1,10 +1,13 @@
+from typing import Iterator
+
 from anthropic import Anthropic
 
 from app.domain.llm_service import GroundedAnswer
-from app.infrastructure.llm.prompts import (
+from app.prompts import (
     SYSTEM_PROMPT,
     build_grounded_rag_prompt,
     build_rag_prompt,
+    build_streamed_grounded_prompt,
     parse_grounded_answer,
 )
 
@@ -54,3 +57,22 @@ class AnthropicLLMService:
             temperature=self.temperature,
         )
         return parse_grounded_answer(response.content[0].text)
+
+    def stream_grounded_answer(
+        self, *, question: str, context: str
+    ) -> Iterator[str]:
+        with self.client.messages.stream(
+            model=self.model,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=[
+                {
+                    "role": "user",
+                    "content": build_streamed_grounded_prompt(
+                        question=question, context=context
+                    ),
+                }
+            ],
+            temperature=self.temperature,
+        ) as stream:
+            yield from stream.text_stream
