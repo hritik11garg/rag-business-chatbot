@@ -1,0 +1,9 @@
+{
+  "documents_ingested": 500,
+  "chunks_stored": 12855,
+  "elapsed_seconds": 501.8,
+  "docs_per_minute": 59.8,
+  "chunks_per_second": 25.6,
+  "failures": [],
+  "previously_ingested": 0
+}

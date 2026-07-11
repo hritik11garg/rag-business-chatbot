@@ -7,3 +7,6 @@ mypy==1.11.2
 
 # Debugging / REPL
 ipython==8.26.0
+
+# Eval corpus tooling (scripts/fetch_wikipedia.py renders articles to PDF)
+fpdf2==2.8.7

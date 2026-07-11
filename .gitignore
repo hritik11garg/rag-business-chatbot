@@ -21,6 +21,11 @@ Thumbs.db
 # Celery
 celerybeat-schedule
 
+# Eval corpus data (regenerate with scripts/fetch_wikipedia.py;
+# the manifest + results ARE committed, the bulk data is not)
+evals/corpus/
+evals/heldout/
+
 # Alembic
 alembic/versions/*.pyc
 

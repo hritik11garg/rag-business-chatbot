@@ -1,4 +1,6 @@
 import os
+from typing import Callable
+
 from sqlalchemy.orm import Session
 from fastapi import UploadFile, HTTPException
 
@@ -11,22 +13,45 @@ from app.services.document_processing import (
     chunk_text,
 )
 from app.services.embedding_service import store_embeddings
-from app.tasks.faq_tasks import generate_faqs_task
 
 
 UPLOAD_BASE_DIR = "uploads"
 
 
+class PdfIngestError(Exception):
+    """The saved PDF could not be ingested; the file has been removed."""
+
+
+class UnreadablePdfError(PdfIngestError):
+    """Corrupted, image-only, or empty PDF."""
+
+
+class EmbeddingStorageError(PdfIngestError):
+    """Chunks extracted but embedding generation or storage failed."""
+
+
 class UploadDocumentUseCase:
     """
     Handles document upload + ingestion into the RAG system.
+
+    schedule_faq_generation is injected so the caller decides whether FAQ
+    generation happens: the API route wires the Celery task, while bulk
+    ingestion passes None (500 docs must not enqueue 500 LLM jobs).
     """
 
-    def __init__(self, db: Session, *, embedding_service: EmbeddingService):
+    def __init__(
+        self,
+        db: Session,
+        *,
+        embedding_service: EmbeddingService,
+        schedule_faq_generation: Callable[[list[str], int, int], None] | None = None,
+    ):
         self.db = db
         self.embedding_service = embedding_service
+        self.schedule_faq_generation = schedule_faq_generation
 
     def execute(self, *, file: UploadFile, user: User) -> dict:
+        """HTTP-facing path: validate, save the upload, then ingest."""
         if file.content_type != "application/pdf":
             raise HTTPException(400, "Only PDF files are supported")
 
@@ -43,59 +68,74 @@ class UploadDocumentUseCase:
             counter += 1
             file_path = os.path.join(org_dir, f"{name}_v{counter}{ext}")
 
-        final_filename = os.path.basename(file_path)
         file.file.seek(0)
 
-        # Save file
         with open(file_path, "wb") as f:
             f.write(file.file.read())
 
-        # Validate & extract text
+        try:
+            return self.ingest_pdf(
+                file_path=file_path,
+                organization_id=user.organization_id,
+                uploaded_by=user.id,
+            )
+        except UnreadablePdfError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except EmbeddingStorageError as exc:
+            raise HTTPException(500, str(exc)) from exc
+
+    def ingest_pdf(
+        self, *, file_path: str, organization_id: int, uploaded_by: int
+    ) -> dict:
+        """Core ingestion for an already-saved PDF — no HTTP types.
+
+        Deletes the file on failure so callers never accumulate PDFs that
+        can't be served as sources.
+        """
         try:
             raw_text = extract_text_from_pdf(file_path)
             clean_text = normalize_text(raw_text)
             chunks = chunk_text(clean_text)
-        except Exception:
+        except Exception as exc:
             os.remove(file_path)
-            raise HTTPException(400, "Corrupted or unreadable PDF")
+            raise UnreadablePdfError("Corrupted or unreadable PDF") from exc
 
         if not chunks:
             os.remove(file_path)
-            raise HTTPException(400, "No readable content found")
+            raise UnreadablePdfError("No readable content found")
 
         # Store document metadata
         document = Document(
-            filename=final_filename,
-            content_type=file.content_type,
-            organization_id=user.organization_id,
-            uploaded_by=user.id,
+            filename=os.path.basename(file_path),
+            content_type="application/pdf",
+            organization_id=organization_id,
+            uploaded_by=uploaded_by,
         )
 
         self.db.add(document)
         self.db.commit()
         self.db.refresh(document)
 
-        # Store embeddings (SOLID-compliant)
         try:
             store_embeddings(
                 db=self.db,
-                organization_id=user.organization_id,
+                organization_id=organization_id,
                 document=document,
                 chunks=chunks,
                 embedding_service=self.embedding_service,
             )
-        except Exception:
+        except Exception as exc:
             self.db.delete(document)
             self.db.commit()
             os.remove(file_path)
-            raise HTTPException(500, "Embedding generation failed")
+            raise EmbeddingStorageError("Embedding generation failed") from exc
 
-        # Send FAQs to background worker
-        generate_faqs_task.delay(chunks, document.id, user.organization_id)
+        if self.schedule_faq_generation is not None:
+            self.schedule_faq_generation(chunks, document.id, organization_id)
 
         return {
             "id": document.id,
             "filename": document.filename,
-            "organization_id": document.organization_id,
+            "organization_id": organization_id,
             "chunks_stored": len(chunks),
         }

@@ -1,26 +1,16 @@
-import os
 from typing import List
 from app.use_cases.delete_document import DeleteDocumentUseCase
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
-from sqlalchemy import text
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from app.use_cases.upload_document import UploadDocumentUseCase
 from app.composition.singletons import get_embedding_service
 from app.api.deps import get_db, get_current_user
 from app.db.models.document import Document
 from app.db.models.user import User
-from app.services.document_processing import (
-    extract_text_from_pdf,
-    normalize_text,
-    chunk_text,
-)
-from app.services.embedding_service import store_embeddings
 # Celery task (real background worker)
 from app.tasks.faq_tasks import generate_faqs_task
 
 router = APIRouter(prefix="/documents", tags=["documents"])
-
-UPLOAD_BASE_DIR = "uploads"
 
 
 # =========================================================
@@ -59,7 +49,11 @@ def upload_document(
     current_user: User = Depends(get_current_user),
 ):
     use_case = UploadDocumentUseCase(
-        db, embedding_service=get_embedding_service()
+        db,
+        embedding_service=get_embedding_service(),
+        schedule_faq_generation=lambda chunks, doc_id, org_id: (
+            generate_faqs_task.delay(chunks, doc_id, org_id)
+        ),
     )
     return use_case.execute(file=file, user=current_user)
 

@@ -3,7 +3,7 @@
 Step-by-step instructions to get the RAG Business Chatbot running on a
 new machine after `git clone`.
 
-**Stack:** FastAPI · PostgreSQL + pgvector · Redis + Celery · OpenAI API · Sentence Transformers
+**Stack:** FastAPI · PostgreSQL + pgvector · Redis + Celery · Pluggable LLM (OpenAI / Groq / Gemini / Ollama / Claude) · Sentence Transformers
 
 ---
 
@@ -15,7 +15,8 @@ new machine after `git clone`.
 | Docker Desktop | any recent | `docker --version` (must be running) |
 | Git | any | `git --version` |
 
-You also need an **OpenAI API key** (https://platform.openai.com/api-keys).
+You also need an API key for ONE LLM provider — the free Groq tier
+works fine (see the provider table in step 3).
 
 ---
 
@@ -46,7 +47,7 @@ Optional extras:
 
 ```powershell
 pip install -r requirements/test.txt   # pytest
-pip install -r requirements/dev.txt    # black, ruff, mypy, ipython
+pip install -r requirements/dev.txt    # black, ruff, mypy, ipython, fpdf2 (eval corpus)
 ```
 
 > ⚠️ This installs `torch` and `sentence-transformers` — the download is
@@ -137,8 +138,8 @@ alembic upgrade head
 ```
 
 Expected tables: `users`, `organizations`, `documents`,
-`document_embeddings`, `chat_history` (plus Alembic's own
-`alembic_version`).
+`document_embeddings`, `chat_history`, `conversation_summaries`
+(plus Alembic's own `alembic_version`).
 
 ---
 
@@ -179,6 +180,17 @@ Quick health check: http://127.0.0.1:8000/health → `{"status": "ok"}`
 pip install -r requirements/test.txt
 pytest
 ```
+
+---
+
+## 10. (Optional) Reproduce the evals
+
+The measured RAG-vs-vanilla results in [evals/README.md](evals/README.md)
+can be regenerated with the five commands listed there (corpus fetch →
+bulk ingest → golden set → answers → judge). Requires
+`LLM_PROVIDER=groq` and `pip install -r requirements/dev.txt` (fpdf2).
+The stages checkpoint per item, so free-tier rate limits can interrupt
+them safely — rerun the same command to resume.
 
 ---
 
