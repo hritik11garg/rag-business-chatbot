@@ -18,8 +18,13 @@ class Settings(BaseSettings):
     RATE_LIMIT_CHAT: str = "30/minute"
 
     # Uploads — cap read into memory; content-type headers are
-    # client-controlled, so size is the only pre-parse defense
+    # client-controlled, so size + magic-byte check are the pre-parse
+    # defenses (see UploadDocumentUseCase)
     MAX_UPLOAD_MB: int = 25
+
+    # Send HSTS only when the app is actually served over TLS (behind a
+    # TLS-terminating proxy in prod); leave off for plain-HTTP local dev.
+    ENABLE_HSTS: bool = False
 
     # Database
     DATABASE_URL: str

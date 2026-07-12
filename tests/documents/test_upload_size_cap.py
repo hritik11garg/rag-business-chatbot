@@ -28,7 +28,8 @@ def make_user():
 def test_oversized_upload_is_413_and_leaves_no_file(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # uploads/ dir is cwd-relative
     monkeypatch.setattr(settings, "MAX_UPLOAD_MB", 1)
-    upload = FakeUpload(b"x" * (2 * 1024 * 1024))  # 2 MB > 1 MB cap
+    # Valid PDF magic so we exercise the SIZE cap, not the magic check.
+    upload = FakeUpload(b"%PDF-" + b"x" * (2 * 1024 * 1024))  # > 1 MB cap
 
     use_case = UploadDocumentUseCase(db=None, embedding_service=None)
     with pytest.raises(HTTPException) as exc_info:

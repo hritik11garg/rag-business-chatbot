@@ -87,7 +87,7 @@ def test_route_maps_duplicate_email_to_400():
             json={
                 "organization_name": "acme",
                 "email": "a@acme.com",
-                "password": "pw",
+                "password": "valid-password",
             },
         )
         assert response.status_code == 400

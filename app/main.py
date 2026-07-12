@@ -43,6 +43,30 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 @app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Baseline hardening headers on every response (OWASP A05).
+
+    X-Content-Type-Options stops MIME sniffing; X-Frame-Options +
+    frame-ancestors stop clickjacking; Referrer-Policy stops URL
+    leakage; Permissions-Policy drops powerful browser features the
+    API never needs. HSTS is opt-in (TLS-only) via settings.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault(
+        "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+    )
+    if settings.ENABLE_HSTS:
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=63072000; includeSubDomains",
+        )
+    return response
+
+
+@app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
     """Assign a correlation ID to every request (honoring an inbound
     X-Request-ID from a proxy), expose it on the response, and emit one
