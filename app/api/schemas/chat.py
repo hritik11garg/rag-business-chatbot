@@ -10,3 +10,10 @@ class ChatRequest(BaseModel):
     # or name at least one document — an empty list is rejected rather
     # than silently meaning "search nothing".
     document_ids: list[int] | None = Field(default=None, min_length=1)
+
+
+class ChatResponse(BaseModel):
+    question: str
+    answer: str
+    sources: list[str]
+    confidence: str  # "high" | "medium" | "low"

@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_AUTH: str = "10/minute"
     RATE_LIMIT_CHAT: str = "30/minute"
 
+    # Uploads — cap read into memory; content-type headers are
+    # client-controlled, so size is the only pre-parse defense
+    MAX_UPLOAD_MB: int = 25
+
     # Database
     DATABASE_URL: str
 

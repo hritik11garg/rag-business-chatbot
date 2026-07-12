@@ -30,13 +30,10 @@ def normalize_text(text: str) -> str:
     if buffer:
         merged_lines.append(buffer)
 
-    # Join paragraphs
-    cleaned_text = "\n\n".join(merged_lines)
-
-    # Final cleanup of excessive spaces
-    cleaned_text = re.sub(r"\s+", " ", cleaned_text)
-
-    return cleaned_text.strip()
+    # Output is deliberately one whitespace-normalized line: chunking
+    # is character-based, so sentence boundaries matter here but
+    # paragraph structure does not.
+    return re.sub(r"\s+", " ", " ".join(merged_lines)).strip()
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -92,9 +89,12 @@ def chunk_text(
 
     while start < text_length:
         end = start + chunk_size
-        chunk = text[start:end]
+        chunk = text[start:end].strip()
 
-        chunks.append(chunk.strip())
+        # A whitespace-only tail would otherwise be embedded and stored
+        # as a retrievable (and useless) row.
+        if chunk:
+            chunks.append(chunk)
 
         start = end - overlap
 

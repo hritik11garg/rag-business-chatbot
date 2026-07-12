@@ -4,6 +4,7 @@ from typing import Callable
 from sqlalchemy.orm import Session
 from fastapi import UploadFile, HTTPException
 
+from app.core.config import settings
 from app.domain.embedding_service import EmbeddingService
 from app.db.models.document import Document
 from app.db.models.user import User
@@ -68,10 +69,25 @@ class UploadDocumentUseCase:
             counter += 1
             file_path = os.path.join(org_dir, f"{name}_v{counter}{ext}")
 
+        # Stream to disk with a size cap. The content-type header is
+        # client-controlled, so the cap is the only defense that runs
+        # before the parser — an unbounded read() is an OOM invitation.
+        max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
         file.file.seek(0)
-
+        written = 0
+        too_large = False
         with open(file_path, "wb") as f:
-            f.write(file.file.read())
+            while block := file.file.read(1024 * 1024):
+                written += len(block)
+                if written > max_bytes:
+                    too_large = True
+                    break
+                f.write(block)
+        if too_large:
+            os.remove(file_path)
+            raise HTTPException(
+                413, f"File exceeds the {settings.MAX_UPLOAD_MB} MB upload limit"
+            )
 
         try:
             return self.ingest_pdf(

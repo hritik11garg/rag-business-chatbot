@@ -1,52 +1,27 @@
-from typing import List
-from app.use_cases.delete_document import DeleteDocumentUseCase
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
-from app.use_cases.upload_document import UploadDocumentUseCase
-from app.composition.singletons import get_embedding_service
-from app.api.deps import get_db, get_current_user
-from app.db.models.document import Document
-from app.db.models.user import User
 
-# Celery task (real background worker)
+from app.api.deps import get_current_user, get_db
+from app.api.schemas.common import MessageResponse
+from app.api.schemas.documents import DocumentOut, UploadResponse
+from app.composition.singletons import get_embedding_service
+from app.db.models.user import User
 from app.tasks.faq_tasks import generate_faqs_task
+from app.use_cases.delete_document import DeleteDocumentUseCase, DocumentNotFoundError
+from app.use_cases.list_documents import ListDocumentsUseCase
+from app.use_cases.upload_document import UploadDocumentUseCase
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-# =========================================================
-# 📄 List organization documents
-# =========================================================
-@router.get("", response_model=List[dict])
+@router.get("", response_model=list[DocumentOut])
 def list_documents(
     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    documents = (
-        db.query(Document)
-        .filter(Document.organization_id == current_user.organization_id)
-        .order_by(Document.id.desc())
-        .all()
-    )
-
-    return [
-        {
-            "id": doc.id,
-            "filename": doc.filename,
-            "content_type": doc.content_type,
-            "uploaded_by": doc.uploaded_by,
-            "created_at": doc.created_at,
-            "updated_at": doc.updated_at,
-        }
-        for doc in documents
-    ]
+    return ListDocumentsUseCase(db).execute(user=current_user)
 
 
-# =========================================================
-# 📤 Upload document + RAG ingestion
-# =========================================================
-
-
-@router.post("/upload", status_code=201)
+@router.post("/upload", status_code=201, response_model=UploadResponse)
 def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -62,17 +37,16 @@ def upload_document(
     return use_case.execute(file=file, user=current_user)
 
 
-# =========================================================
-# 🗑 Delete document + vector cleanup
-# =========================================================
-@router.delete("/{document_id}", status_code=200)
+@router.delete("/{document_id}", status_code=200, response_model=MessageResponse)
 def delete_document(
     document_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    use_case = DeleteDocumentUseCase(db)
-    return use_case.execute(
-        document_id=document_id,
-        user=current_user,
-    )
+    try:
+        return DeleteDocumentUseCase(db).execute(
+            document_id=document_id,
+            user=current_user,
+        )
+    except DocumentNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc

@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_user
-from app.api.schemas.chat import ChatRequest
+from app.api.schemas.chat import ChatRequest, ChatResponse
 from app.core.config import settings
 from app.core.ratelimit import limiter
 from app.db.models.user import User
@@ -14,7 +14,7 @@ from app.composition.chat import build_chat_router_use_case
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-@router.post("")
+@router.post("", response_model=ChatResponse)
 @limiter.limit(settings.RATE_LIMIT_CHAT)
 def chat(
     request: Request,

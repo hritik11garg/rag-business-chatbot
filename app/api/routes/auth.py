@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.api.schemas.auth import RefreshRequest, SignupRequest, TokenResponse
+from app.api.schemas.common import MessageResponse
 from app.core.config import settings
 from app.core.ratelimit import limiter
 from app.core.security import (
@@ -14,20 +15,26 @@ from app.core.security import (
     verify_password,
 )
 from app.db.models.user import User
-from app.use_cases.signup_organization import SignupOrganizationUseCase
+from app.use_cases.signup_organization import (
+    EmailAlreadyRegisteredError,
+    SignupOrganizationUseCase,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/signup", status_code=201)
+@router.post("/signup", status_code=201, response_model=MessageResponse)
 @limiter.limit(settings.RATE_LIMIT_AUTH)
 def signup(request: Request, data: SignupRequest, db: Session = Depends(get_db)):
     use_case = SignupOrganizationUseCase(db)
-    return use_case.execute(
-        organization_name=data.organization_name,
-        email=data.email,
-        password=data.password,
-    )
+    try:
+        return use_case.execute(
+            organization_name=data.organization_name,
+            email=data.email,
+            password=data.password,
+        )
+    except EmailAlreadyRegisteredError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @router.post("/login", response_model=TokenResponse)
