@@ -3,7 +3,7 @@ import {
   fetchDocuments,
   loadTokens,
   login,
-  saveTokens,
+  logout,
   signup,
   streamChat,
   uploadPdf,
@@ -14,8 +14,8 @@ export default function App() {
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
   return (
     <Chat
-      onLogout={() => {
-        saveTokens(null);
+      onLogout={async () => {
+        await logout(); // revoke server-side, then drop local tokens
         setAuthed(false);
       }}
     />

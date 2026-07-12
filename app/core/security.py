@@ -50,13 +50,15 @@ def create_access_token(
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
-def create_refresh_token(subject: str) -> str:
+def create_refresh_token(subject: str, *, jti: str) -> tuple[str, datetime]:
     """
     Create a long-lived JWT refresh token (type claim: "refresh").
 
-    Only /auth/refresh accepts it; the type claim keeps a leaked
-    refresh token from being replayed as an API credential and an
-    access token from minting new sessions.
+    Carries a unique `jti` so the server-side store can rotate and
+    revoke it. Only /auth/refresh accepts it; the type claim keeps a
+    leaked refresh token from being replayed as an API credential and
+    an access token from minting new sessions. Returns the token and
+    its absolute expiry (the store records the latter).
     """
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
@@ -66,6 +68,7 @@ def create_refresh_token(subject: str) -> str:
         "sub": subject,
         "exp": expire,
         "type": "refresh",
+        "jti": jti,
     }
 
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM), expire

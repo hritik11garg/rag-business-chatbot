@@ -3,6 +3,7 @@ from app.db.models.conversation_summary import ConversationSummary
 from app.db.models.document import Document
 from app.db.models.embedding import DocumentEmbedding
 from app.db.models.organization import Organization
+from app.db.models.refresh_token import RefreshToken
 from app.db.models.user import User
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     "Document",
     "DocumentEmbedding",
     "Organization",
+    "RefreshToken",
     "User",
 ]

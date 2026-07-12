@@ -1,4 +1,10 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# HS256 auth security rests entirely on this key's secrecy and entropy.
+# These obvious placeholders must never boot the app in ANY environment.
+_PLACEHOLDER_SECRETS = {"", "YOUR_SECRET_KEY", "changeme", "secret", "change-me"}
+_MIN_SECRET_LEN = 32
 
 
 class Settings(BaseSettings):
@@ -49,6 +55,29 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env")
+
+    @model_validator(mode="after")
+    def _validate_secret_key(self) -> "Settings":
+        """Fail fast on a weak signing key (OWASP A02).
+
+        A placeholder key is rejected everywhere — booting with it means
+        anyone who has read the public example file can forge tokens. The
+        length floor is enforced in production, where a too-short key is
+        a real forgery risk; dev/CI may use shorter throwaway keys.
+        """
+        if self.SECRET_KEY in _PLACEHOLDER_SECRETS:
+            raise ValueError(
+                "SECRET_KEY is a placeholder — set a real random secret "
+                '(python -c "import secrets; print(secrets.token_hex(32))")'
+            )
+        if self.ENV.lower() in {"production", "prod"} and (
+            len(self.SECRET_KEY) < _MIN_SECRET_LEN
+        ):
+            raise ValueError(
+                f"SECRET_KEY must be at least {_MIN_SECRET_LEN} characters "
+                "in production"
+            )
+        return self
 
 
 settings = Settings()

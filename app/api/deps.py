@@ -21,6 +21,20 @@ def get_db():
         db.close()
 
 
+def get_token_service(db: Session = Depends(get_db)):
+    """Refresh-token service, composed here so routes depend on the
+    abstraction and tests can override it without a database."""
+    from app.infrastructure.db.refresh_token_repository import (
+        DBRefreshTokenRepository,
+    )
+    from app.use_cases.auth_tokens import AuthTokenService
+
+    return AuthTokenService(
+        DBRefreshTokenRepository(db),
+        get_user=lambda uid: db.query(User).filter(User.id == uid).first(),
+    )
+
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 

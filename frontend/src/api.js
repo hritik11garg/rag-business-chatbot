@@ -40,6 +40,24 @@ export async function signup(organizationName, email, password) {
   return res.json();
 }
 
+export async function logout() {
+  // Best-effort server-side revocation of the whole refresh family, then
+  // drop local tokens regardless of the network result.
+  const tokens = loadTokens();
+  if (tokens?.refresh_token) {
+    try {
+      await fetch("/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: tokens.refresh_token }),
+      });
+    } catch {
+      /* offline logout still clears local state below */
+    }
+  }
+  saveTokens(null);
+}
+
 async function tryRefresh() {
   const tokens = loadTokens();
   if (!tokens?.refresh_token) return null;

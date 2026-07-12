@@ -12,8 +12,9 @@ jobs:
 
     env:
       # Unit tests never touch a real DB or LLM; these only satisfy
-      # Settings so `app.main` can be imported.
-      SECRET_KEY: ci-only-secret-key
+      # Settings so `app.main` can be imported. ENV stays development,
+      # so the production-only SECRET_KEY length floor doesn't apply.
+      SECRET_KEY: ci-only-throwaway-secret-not-a-real-key-0123456789
       DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
       LLM_PROVIDER: groq
       GROQ_API_KEY: ci-placeholder
