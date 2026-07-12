@@ -10,7 +10,7 @@ embeddings, pgvector similarity search, async workers, and grounded
 LLM responses, the way modern enterprise AI assistants in SaaS
 platforms and internal knowledge tools are built.
 
-**Stack:** FastAPI · PostgreSQL + pgvector · Redis + Celery · Sentence Transformers (MiniLM) · Pluggable LLM (OpenAI / Groq / Gemini / Ollama / Claude) · SQLAlchemy + Alembic · Docker
+**Stack:** FastAPI · PostgreSQL + pgvector · Redis + Celery · Sentence Transformers (MiniLM) · Pluggable LLM (OpenAI / Groq / Gemini / Ollama / Claude) · SQLAlchemy + Alembic · Docker · React (Vite) demo UI
 
 ------------------------------------------------------------------------
 
@@ -39,13 +39,23 @@ platforms and internal knowledge tools are built.
 - LLM-graded confidence score (high / medium / low) on every response,
   from the same call as the answer (no second round-trip)
 - Centralized prompt templates + response parsers (`app/prompts/`)
+- **Structured JSON logging** with a per-request correlation ID
+  (`X-Request-ID` honored inbound, returned on every response)
+- **Refresh-token auth** (typed JWTs, rotation via `/auth/refresh`) and
+  **per-IP rate limiting** on auth + chat endpoints
 - Document deletion with vector + file cleanup
 - Alembic database migrations
+- **One-command Docker startup** (`docker compose --profile app up`)
+  — API, worker, Postgres, Redis, migrations included
+- **GitHub Actions CI**: ruff + black + pytest on every push
+- **React demo frontend** (`frontend/`) — login, upload, streaming
+  chat with confidence badges and sources
 - **Held-out eval harness with committed results** — see
   [Measured results](#-measured-results) below
 - **Load-tested at 50 concurrent users** (Locust, 4 uvicorn workers,
   zero failures) — see [Measured results](#-measured-results) below
-- Pytest test suite (22 tests) for chat, streaming, and schemas
+- Pytest test suite (45 tests): chat, streaming, auth/refresh flow,
+  upload pipeline, tenant isolation, eval plumbing
 
 ------------------------------------------------------------------------
 
@@ -92,7 +102,8 @@ The codebase follows a layered, dependency-inverted design:
     │                    #   confidence scoring, FAQ generation
     ├── tasks/           # Celery background tasks
     ├── db/              # SQLAlchemy models + session
-    └── core/            # Settings, security (JWT/bcrypt), Celery app
+    └── core/            # Settings, security (JWT/bcrypt), structured
+                         #   logging, rate limiting, Celery app
 
 Use cases depend on **Protocols**, not concrete providers. The LLM
 layer proves it: one OpenAI-compatible adapter serves OpenAI, Groq,
@@ -135,7 +146,8 @@ picks one from `LLM_PROVIDER`, with zero changes to business logic.
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/auth/signup` | Create an organization + first user |
-| `POST` | `/auth/login` | OAuth2 login → JWT access token |
+| `POST` | `/auth/login` | OAuth2 login → access + refresh token pair |
+| `POST` | `/auth/refresh` | Rotate a refresh token for a fresh pair |
 | `GET` | `/me` | Current authenticated user |
 | `GET` | `/documents` | List the organization's documents |
 | `POST` | `/documents/upload` | Upload a PDF (triggers full RAG ingestion) |
@@ -176,7 +188,15 @@ Interactive docs: **http://127.0.0.1:8000/docs**
 prerequisites, environment variables, database initialization, and
 troubleshooting.
 
-Quick version:
+Quick version (one command, everything in Docker):
+
+```bash
+copy .env.example .env    # fill in SECRET_KEY + your LLM key
+docker compose --profile app up --build
+# → API on http://127.0.0.1:8000 (migrations run automatically)
+```
+
+Or the host-dev flow:
 
 ```bash
 # 1. Environment
@@ -184,7 +204,7 @@ python -m venv venv && venv\Scripts\activate      # Windows
 pip install -r requirements/base.txt
 copy .env.example .env                             # then edit values
 
-# 2. Infrastructure (Postgres + pgvector, Redis)
+# 2. Infrastructure only (Postgres + pgvector, Redis)
 docker compose up -d
 
 # 3. Database tables (the migration also enables the pgvector extension)
@@ -194,6 +214,9 @@ alembic upgrade head
 celery -A app.core.celery_app:celery worker --pool=solo -Q rag-queue --loglevel=info
 uvicorn app.main:app --reload
 ```
+
+Demo UI: `cd frontend && npm install && npm run dev` →
+http://localhost:5173 (see [frontend/README.md](frontend/README.md)).
 
 > ⏱ First startup takes ~40s (torch / sentence-transformers imports),
 > and the first embedding call downloads the MiniLM model.
@@ -210,9 +233,14 @@ pip install -r requirements/test.txt
 pytest
 ```
 
-22 tests covering the chat router (intent dispatch), the RAG chat use
-case, streaming (confidence-marker holdback), request validation, and
-prompt parsers — with fakes injected via the domain Protocols.
+45 tests covering the chat router (intent dispatch), the RAG chat use
+case, streaming (confidence-marker holdback), request validation,
+prompt parsers, the auth flow (login / refresh rotation / token-type
+separation / rate limiting), the upload pipeline (failure cleanup +
+scheduler injection), the tenant-isolation SQL invariant, and the eval
+harness arithmetic — with fakes injected via the domain Protocols (no
+database or LLM needed). CI runs ruff, black, and the suite on every
+push.
 
 ------------------------------------------------------------------------
 
@@ -258,8 +286,11 @@ Real-LLM streaming time-to-first-token (production Groq model, n=20):
 - ✅ SSE streaming responses + summary memory
 - ✅ Held-out eval harness with committed results (see above)
 - ✅ Load benchmarks — Locust, 50 users, committed results (see above)
-- CI pipeline, structured logging, rate limiting, one-command Docker
-  startup
+- ✅ CI pipeline (GitHub Actions), structured logging with request IDs,
+  rate limiting + refresh tokens, one-command Docker startup, React
+  demo frontend
+- Next: refresh-token revocation store, Redis-backed rate limiting,
+  httpOnly-cookie auth for the SPA
 
 ------------------------------------------------------------------------
 

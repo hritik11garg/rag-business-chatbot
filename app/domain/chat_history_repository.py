@@ -3,8 +3,7 @@ from app.db.models.chat_history import ChatHistory
 
 
 class ChatHistoryRepository(Protocol):
-    def get_recent_history(self, *, user_id: int) -> List[ChatHistory]:
-        ...
+    def get_recent_history(self, *, user_id: int) -> List[ChatHistory]: ...
 
     def save_message(
         self,
@@ -13,5 +12,4 @@ class ChatHistoryRepository(Protocol):
         organization_id: int,
         role: str,
         message: str,
-    ) -> None:
-        ...
+    ) -> None: ...

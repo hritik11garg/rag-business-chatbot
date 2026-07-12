@@ -38,10 +38,10 @@ API = "https://en.wikipedia.org/w/api.php"
 # Wikipedia asks for a descriptive User-Agent with contact info.
 USER_AGENT = "rag-business-chatbot-evals/1.0 (contact: garghritikgarg@gmail.com)"
 
-MIN_WIKITEXT_BYTES = 12_000   # skip stubs without fetching their text
-MIN_EXTRACT_CHARS = 4_000     # after cleaning: enough to yield ~8+ chunks
-MAX_EXTRACT_CHARS = 20_000    # truncate monsters at a paragraph boundary
-REQUEST_INTERVAL = 0.4        # seconds between API calls (~2.5 req/s)
+MIN_WIKITEXT_BYTES = 12_000  # skip stubs without fetching their text
+MIN_EXTRACT_CHARS = 4_000  # after cleaning: enough to yield ~8+ chunks
+MAX_EXTRACT_CHARS = 20_000  # truncate monsters at a paragraph boundary
+REQUEST_INTERVAL = 0.4  # seconds between API calls (~2.5 req/s)
 
 # Sections after which nothing useful for QA remains.
 TRAILING_SECTIONS = re.compile(
@@ -231,8 +231,13 @@ def main() -> int:
                 have_heldout.add(stem)
 
             manifest.append(
-                {"title": title, "pageid": pageid, "split": split,
-                 "file": filename, "chars": len(text)}
+                {
+                    "title": title,
+                    "pageid": pageid,
+                    "split": split,
+                    "file": filename,
+                    "chars": len(text),
+                }
             )
             done = len(have_corpus) + len(have_heldout)
             if done % 25 == 0:

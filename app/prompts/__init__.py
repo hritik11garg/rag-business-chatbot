@@ -6,6 +6,7 @@ builder functions fill their variables. Adapters and services import
 from here so that switching providers changes *who* we ask, never
 *what* we ask — all providers must behave identically.
 """
+
 from app.prompts.rag import (
     SYSTEM_PROMPT,
     RAG_ANSWER_TEMPLATE,

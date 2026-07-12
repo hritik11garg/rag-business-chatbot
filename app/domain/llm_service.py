@@ -15,17 +15,13 @@ class LLMService(Protocol):
     Abstraction for Large Language Model interactions.
     """
 
-    def generate_answer(self, *, question: str, context: str) -> str:
-        ...
+    def generate_answer(self, *, question: str, context: str) -> str: ...
 
     def generate_grounded_answer(
         self, *, question: str, context: str
-    ) -> GroundedAnswer:
-        ...
+    ) -> GroundedAnswer: ...
 
-    def stream_grounded_answer(
-        self, *, question: str, context: str
-    ) -> Iterator[str]:
+    def stream_grounded_answer(self, *, question: str, context: str) -> Iterator[str]:
         """Yield the answer as text fragments. The stream ends with a
         CONFIDENCE marker line the caller parses off (see
         app.prompts.split_confidence_marker)."""

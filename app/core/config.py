@@ -1,14 +1,21 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # Application
     APP_NAME: str = "Business Knowledge Base Chatbot"
     ENV: str = "development"
+    LOG_LEVEL: str = "INFO"
 
     # Security
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Rate limiting (per client IP; in-memory per worker process)
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH: str = "10/minute"
+    RATE_LIMIT_CHAT: str = "30/minute"
 
     # Database
     DATABASE_URL: str
@@ -32,8 +39,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env")
 
 
 settings = Settings()

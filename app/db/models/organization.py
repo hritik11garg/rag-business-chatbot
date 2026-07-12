@@ -17,7 +17,5 @@ class Organization(Base):
 
     # Relationship: one organization → many users
     users = relationship(
-        "User",
-        back_populates="organization",
-        cascade="all, delete-orphan"
+        "User", back_populates="organization", cascade="all, delete-orphan"
     )

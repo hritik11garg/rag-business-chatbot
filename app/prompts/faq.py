@@ -1,4 +1,5 @@
 """Prompt and response parsing for background FAQ generation."""
+
 import json
 
 FAQ_GENERATION_TEMPLATE = """
@@ -39,6 +40,5 @@ def parse_faq_response(raw: str) -> list[dict]:
     if not isinstance(faqs, list):
         return []
     return [
-        f for f in faqs
-        if isinstance(f, dict) and "question" in f and "answer" in f
+        f for f in faqs if isinstance(f, dict) and "question" in f and "answer" in f
     ]

@@ -7,6 +7,7 @@ from app.composition.singletons import get_embedding_service
 from app.api.deps import get_db, get_current_user
 from app.db.models.document import Document
 from app.db.models.user import User
+
 # Celery task (real background worker)
 from app.tasks.faq_tasks import generate_faqs_task
 
@@ -17,7 +18,9 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 # 📄 List organization documents
 # =========================================================
 @router.get("", response_model=List[dict])
-def list_documents(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_documents(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
     documents = (
         db.query(Document)
         .filter(Document.organization_id == current_user.organization_id)
@@ -42,6 +45,7 @@ def list_documents(db: Session = Depends(get_db), current_user: User = Depends(g
 # 📤 Upload document + RAG ingestion
 # =========================================================
 
+
 @router.post("/upload", status_code=201)
 def upload_document(
     file: UploadFile = File(...),
@@ -56,6 +60,7 @@ def upload_document(
         ),
     )
     return use_case.execute(file=file, user=current_user)
+
 
 # =========================================================
 # 🗑 Delete document + vector cleanup

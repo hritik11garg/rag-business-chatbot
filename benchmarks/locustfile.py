@@ -8,7 +8,9 @@ index: JWT auth, MiniLM query embedding, pgvector HNSW search over
 history writes.
 
 The LLM must be the local mock (benchmarks/mock_llm.py) — point the
-app at it with LLM_BASE_URL=http://127.0.0.1:9099/v1. Percentiles
+app at it with LLM_BASE_URL=http://127.0.0.1:9099/v1, and start the
+app with RATE_LIMIT_ENABLED=false (50 users share one IP; the per-IP
+limiter would otherwise throttle the test). Percentiles
 therefore measure OUR stack with token generation simulated at
 realistic pacing, not cloud LLM latency (that is measured separately
 by benchmarks/streaming_ttft.py).

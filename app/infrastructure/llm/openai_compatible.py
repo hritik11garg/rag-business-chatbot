@@ -64,9 +64,7 @@ class OpenAICompatibleLLMService:
         )
         return parse_grounded_answer(response.choices[0].message.content)
 
-    def stream_grounded_answer(
-        self, *, question: str, context: str
-    ) -> Iterator[str]:
+    def stream_grounded_answer(self, *, question: str, context: str) -> Iterator[str]:
         stream = self.client.chat.completions.create(
             model=self.model,
             messages=[

@@ -1,3 +1,4 @@
+import logging
 from typing import Callable, Iterator
 
 from app.db.models.user import User
@@ -20,6 +21,8 @@ HISTORY_CHAR_BUDGET = 2000
 STREAM_HOLDBACK = 40
 
 NO_MATCH_ANSWER = "No relevant information found in the knowledge base."
+
+logger = logging.getLogger(__name__)
 
 
 def trim_history(history, *, budget: int = HISTORY_CHAR_BUDGET) -> str:
@@ -115,8 +118,8 @@ Knowledge base context:
         if self.schedule_summary_update:
             try:
                 self.schedule_summary_update(user.id, user.organization_id)
-            except Exception as exc:  # broker down must never fail the answer
-                print(f"summary update not scheduled: {exc}")
+            except Exception:  # broker down must never fail the answer
+                logger.warning("summary update not scheduled", exc_info=True)
 
     def execute(
         self,

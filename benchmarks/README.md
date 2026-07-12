@@ -71,8 +71,11 @@ python benchmarks/seed_users.py                    # once
 # terminal 1 — mock LLM
 python benchmarks/mock_llm.py
 
-# terminal 2 — app pointed at the mock (PowerShell syntax)
+# terminal 2 — app pointed at the mock (PowerShell syntax).
+# RATE_LIMIT_ENABLED=false: all 50 simulated users share one IP, which
+# the per-IP limiter would (correctly) throttle in production.
 $env:LLM_BASE_URL='http://127.0.0.1:9099/v1'
+$env:RATE_LIMIT_ENABLED='false'
 uvicorn app.main:app --workers 4 --log-level warning
 
 # terminal 3 — the load test

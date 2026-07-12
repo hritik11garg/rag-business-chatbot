@@ -21,24 +21,17 @@ class Document(Base):
     content_type: Mapped[str] = mapped_column(String(100))
 
     organization_id: Mapped[int] = mapped_column(
-        ForeignKey("organizations.id"),
-        nullable=False
+        ForeignKey("organizations.id"), nullable=False
     )
 
-    uploaded_by: Mapped[int] = mapped_column(
-        ForeignKey("users.id"),
-        nullable=False
-    )
+    uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 
     # ⭐ Timestamp when document was created
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now()
+        DateTime(timezone=True), server_default=func.now()
     )
 
     # ⭐ Timestamp when document was last updated
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

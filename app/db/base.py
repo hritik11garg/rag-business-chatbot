@@ -6,4 +6,5 @@ class Base(DeclarativeBase):
     Base class for all database models.
     Keeps metadata centralized.
     """
+
     pass

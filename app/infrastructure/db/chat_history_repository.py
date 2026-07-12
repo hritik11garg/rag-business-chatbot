@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.db.models.chat_history import ChatHistory
-from app.domain.chat_history_repository import ChatHistoryRepository
 
 HISTORY_LIMIT = 6
 

@@ -1,11 +1,13 @@
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_user
 from app.api.schemas.chat import ChatRequest
+from app.core.config import settings
+from app.core.ratelimit import limiter
 from app.db.models.user import User
 from app.composition.chat import build_chat_router_use_case
 
@@ -13,7 +15,9 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 @router.post("")
+@limiter.limit(settings.RATE_LIMIT_CHAT)
 def chat(
+    request: Request,
     payload: ChatRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -28,7 +32,9 @@ def chat(
 
 
 @router.post("/stream")
+@limiter.limit(settings.RATE_LIMIT_CHAT)
 def chat_stream(
+    request: Request,
     payload: ChatRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

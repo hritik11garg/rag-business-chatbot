@@ -58,9 +58,7 @@ class AnthropicLLMService:
         )
         return parse_grounded_answer(response.content[0].text)
 
-    def stream_grounded_answer(
-        self, *, question: str, context: str
-    ) -> Iterator[str]:
+    def stream_grounded_answer(self, *, question: str, context: str) -> Iterator[str]:
         with self.client.messages.stream(
             model=self.model,
             max_tokens=1024,

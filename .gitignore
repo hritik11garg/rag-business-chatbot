@@ -26,6 +26,10 @@ celerybeat-schedule
 evals/corpus/
 evals/heldout/
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
 # Alembic
 alembic/versions/*.pyc
 

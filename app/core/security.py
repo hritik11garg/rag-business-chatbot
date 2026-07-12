@@ -29,19 +29,43 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(
-        subject: str,
-        expires_delta: Optional[timedelta] = None,
+    subject: str,
+    expires_delta: Optional[timedelta] = None,
 ) -> str:
     """
-    Create a JWT access token.
+    Create a short-lived JWT access token (type claim: "access").
     """
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    expire = datetime.now(timezone.utc) + (
+        expires_delta
+        if expires_delta is not None
+        else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     payload = {
         "sub": subject,
         "exp": expire,
+        "type": "access",
+    }
+
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token(subject: str) -> str:
+    """
+    Create a long-lived JWT refresh token (type claim: "refresh").
+
+    Only /auth/refresh accepts it; the type claim keeps a leaked
+    refresh token from being replayed as an API credential and an
+    access token from minting new sessions.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(
+        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
+
+    payload = {
+        "sub": subject,
+        "exp": expire,
+        "type": "refresh",
     }
 
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)

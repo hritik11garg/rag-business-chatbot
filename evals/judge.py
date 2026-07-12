@@ -147,8 +147,10 @@ def main() -> int:
 
     done_ids = {r["id"] for r in read_jsonl(JUDGED_PATH)}
     todo = [a for a in answers if a["id"] not in done_ids]
-    print(f"{len(done_ids)} already judged, {len(todo)} to go "
-          f"(judge model: {JUDGE_MODEL})")
+    print(
+        f"{len(done_ids)} already judged, {len(todo)} to go "
+        f"(judge model: {JUDGE_MODEL})"
+    )
 
     llm = EvalLLM()
     try:
@@ -165,8 +167,10 @@ def main() -> int:
             if n % 20 == 0:
                 print(f"{n}/{len(todo)} judged", flush=True)
     except DailyLimitReached as exc:
-        print(f"\nGroq daily limit hit ({exc}). Progress is checkpointed — "
-              "rerun this command tomorrow to continue.")
+        print(
+            f"\nGroq daily limit hit ({exc}). Progress is checkpointed — "
+            "rerun this command tomorrow to continue."
+        )
         return 0
 
     judged = read_jsonl(JUDGED_PATH)

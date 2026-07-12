@@ -14,9 +14,16 @@ new machine after `git clone`.
 | Python | 3.11+ | `python --version` |
 | Docker Desktop | any recent | `docker --version` (must be running) |
 | Git | any | `git --version` |
+| Node.js | 18+ (optional — only for the demo frontend, step 12) | `node --version` |
 
 You also need an API key for ONE LLM provider — the free Groq tier
 works fine (see the provider table in step 3).
+
+> ⚡ **Shortcut — everything in Docker:** after creating `.env`
+> (step 3), `docker compose --profile app up --build` starts Postgres,
+> Redis, migrations, the API (port 8000), and the Celery worker in one
+> command. Steps 1–7 below are the host-dev flow (faster iteration,
+> `--reload`).
 
 ---
 
@@ -110,8 +117,12 @@ docker compose up -d
 
 This starts:
 
-- **rag-postgres** — PostgreSQL with pgvector, on port **5433**
+- **rag-postgres** — PostgreSQL 16 with pgvector
+  (official `pgvector/pgvector:pg16` image), on port **5433**
 - **rag-redis** — Redis (Celery broker), on port **6379**
+
+(The `api` and `worker` services in the same file only start with
+`--profile app` — plain `docker compose up -d` is infrastructure only.)
 
 Verify both are running:
 
@@ -168,9 +179,14 @@ Quick health check: http://127.0.0.1:8000/health → `{"status": "ok"}`
 ## 8. First-use flow (in Swagger)
 
 1. `POST /auth/signup` — create an organization + first user
-2. `POST /auth/login` — get a JWT token, click **Authorize** 🔒 and paste it
+2. `POST /auth/login` — returns an access + refresh token pair; click
+   **Authorize** 🔒 and paste the access token
 3. `POST /documents/upload` — upload a PDF (stored under `uploads/org_<id>/`)
 4. `POST /chat` — ask questions about your documents
+
+(When the access token expires, `POST /auth/refresh` with the refresh
+token returns a fresh pair. Auth and chat endpoints are rate-limited
+per IP — configurable in `.env`.)
 
 ---
 
@@ -204,6 +220,22 @@ real-LLM streaming TTFT separately. Requires the Phase 5 eval corpus
 to be ingested first (step 10) and `pip install -r requirements/dev.txt`
 (locust). Afterwards clear the summary tasks the bench chats queued:
 `docker exec rag-redis redis-cli DEL rag-queue`.
+
+---
+
+## 12. (Optional) Run the demo frontend
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173** — organization signup/login, PDF
+upload, and streaming chat with confidence badges and sources. The
+Vite dev server proxies API calls to `127.0.0.1:8000`, so the backend
+(step 7 or the Docker profile) must be running. Details:
+[frontend/README.md](frontend/README.md).
 
 ---
 

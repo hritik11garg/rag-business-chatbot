@@ -25,8 +25,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 def get_current_user(
-        token: str = Depends(oauth2_scheme),
-        db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
 ) -> User:
     """
     Validates JWT token and returns the current user.
@@ -40,7 +40,9 @@ def get_current_user(
         )
         user_id: str | None = payload.get("sub")
 
-        if user_id is None:
+        if user_id is None or payload.get("type") != "access":
+            # refresh tokens are only valid at /auth/refresh — a
+            # long-lived token must never work as an API credential
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token payload",

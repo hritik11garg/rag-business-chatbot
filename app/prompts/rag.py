@@ -1,4 +1,5 @@
 """Prompts and response parsing for the /chat answering path."""
+
 import json
 
 from app.domain.llm_service import GroundedAnswer
@@ -106,7 +107,7 @@ def split_confidence_marker(text: str) -> tuple[str, str]:
     """
     idx = text.rfind(CONFIDENCE_MARKER)
     if idx != -1:
-        level = text[idx + len(CONFIDENCE_MARKER):].strip().strip(".").lower()
+        level = text[idx + len(CONFIDENCE_MARKER) :].strip().strip(".").lower()
         if level in _VALID_CONFIDENCE:
             return text[:idx].rstrip(), level
     return text.rstrip(), "low"

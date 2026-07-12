@@ -129,8 +129,10 @@ def main() -> int:
         print(f"All answers at {ANSWERS_PATH}")
         return 0
     except DailyLimitReached as exc:
-        print(f"\nGroq daily limit hit ({exc}). Progress is checkpointed — "
-              "rerun this command tomorrow to continue.")
+        print(
+            f"\nGroq daily limit hit ({exc}). Progress is checkpointed — "
+            "rerun this command tomorrow to continue."
+        )
         return 0
     finally:
         db.close()

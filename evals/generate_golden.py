@@ -79,9 +79,7 @@ def sample_corpus_passages(db, org_id: int, count: int, rng) -> list[dict]:
         {"org_id": org_id, "min_chars": MIN_CHUNK_CHARS},
     ).fetchall()
     rng.shuffle(rows := list(rows))
-    return [
-        {"source": r.filename, "passage": r.content} for r in rows[:count]
-    ]
+    return [{"source": r.filename, "passage": r.content} for r in rows[:count]]
 
 
 def sample_heldout_passages(count: int, rng) -> list[dict]:
@@ -96,7 +94,9 @@ def sample_heldout_passages(count: int, rng) -> list[dict]:
     for path in rng.sample(files, count):
         full = path.read_text(encoding="utf-8")
         start = min(len(full) // 3, max(0, len(full) - PASSAGE_CHARS))
-        passages.append({"source": path.name, "passage": full[start : start + PASSAGE_CHARS]})
+        passages.append(
+            {"source": path.name, "passage": full[start : start + PASSAGE_CHARS]}
+        )
     return passages
 
 
@@ -130,8 +130,10 @@ def main() -> int:
         seen_sources.add(item["source"])
         seen_questions.add(item["question"].lower())
     if existing:
-        print(f"Resuming: {have['answerable']} answerable, "
-              f"{have['unanswerable']} unanswerable already present")
+        print(
+            f"Resuming: {have['answerable']} answerable, "
+            f"{have['unanswerable']} unanswerable already present"
+        )
 
     llm = EvalLLM()
     db = SessionLocal()
@@ -139,15 +141,31 @@ def main() -> int:
         org_id = get_eval_user(db).organization_id
 
         plan = [
-            ("answerable",
-             [p for p in sample_corpus_passages(db, org_id, args.answerable + 30, rng)
-              if p["source"] not in seen_sources],
-             args.answerable),
-            ("unanswerable",
-             [p for p in sample_heldout_passages(
-                 min(args.unanswerable + 10, len(list(HELDOUT_DIR.glob('*.txt')))), rng)
-              if p["source"] not in seen_sources],
-             args.unanswerable),
+            (
+                "answerable",
+                [
+                    p
+                    for p in sample_corpus_passages(
+                        db, org_id, args.answerable + 30, rng
+                    )
+                    if p["source"] not in seen_sources
+                ],
+                args.answerable,
+            ),
+            (
+                "unanswerable",
+                [
+                    p
+                    for p in sample_heldout_passages(
+                        min(
+                            args.unanswerable + 10, len(list(HELDOUT_DIR.glob("*.txt")))
+                        ),
+                        rng,
+                    )
+                    if p["source"] not in seen_sources
+                ],
+                args.unanswerable,
+            ),
         ]
 
         for qa_type, passages, target in plan:
@@ -175,12 +193,16 @@ def main() -> int:
                     "generated (ran out of usable passages) — rerun to top up."
                 )
 
-        print(f"Golden set: {have['answerable']} answerable + "
-              f"{have['unanswerable']} unanswerable at {GOLDEN_PATH}")
+        print(
+            f"Golden set: {have['answerable']} answerable + "
+            f"{have['unanswerable']} unanswerable at {GOLDEN_PATH}"
+        )
         return 0
     except DailyLimitReached as exc:
-        print(f"\nGroq daily limit hit ({exc}). Progress is checkpointed — "
-              "rerun this command tomorrow to continue.")
+        print(
+            f"\nGroq daily limit hit ({exc}). Progress is checkpointed — "
+            "rerun this command tomorrow to continue."
+        )
         return 0
     finally:
         db.close()

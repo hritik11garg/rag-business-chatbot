@@ -1,0 +1,15 @@
+.git
+.github
+.pytest_cache
+.ruff_cache
+venv
+uploads
+learn
+evals/corpus
+evals/heldout
+benchmarks/results
+frontend/node_modules
+frontend/dist
+__pycache__
+*.pyc
+.env

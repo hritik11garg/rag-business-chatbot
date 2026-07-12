@@ -1,6 +1,18 @@
+# Two ways to run:
+#
+#   docker compose up -d
+#       infrastructure only (postgres + redis) — for local development
+#       with uvicorn/celery running on the host, as in SETUP.md.
+#
+#   docker compose --profile app up --build
+#       one-command full stack: postgres, redis, migrations, API on
+#       :8000, Celery worker. Needs a filled-in .env (SECRET_KEY + the
+#       LLM key); DATABASE_URL/CELERY urls are overridden below to the
+#       in-network hostnames.
+
 services:
   postgres:
-    image: ankane/pgvector
+    image: pgvector/pgvector:pg16
     container_name: rag-postgres
     ports:
       - "5433:5432"
@@ -9,13 +21,73 @@ services:
       POSTGRES_PASSWORD: ragpass
       POSTGRES_DB: ragdb
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata16:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7
     container_name: rag-redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    profiles: [app]
+    build: .
+    container_name: rag-api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://raguser:ragpass@postgres:5432/ragdb
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # xet transfer backend hangs in some container networks; plain
+      # HTTPS download of MiniLM (~90MB) is reliable
+      HF_HUB_DISABLE_XET: "1"
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/app/uploads
+      - model_cache:/home/appuser/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    profiles: [app]
+    build: .
+    container_name: rag-worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://raguser:ragpass@postgres:5432/ragdb
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # xet transfer backend hangs in some container networks; plain
+      # HTTPS download of MiniLM (~90MB) is reliable
+      HF_HUB_DISABLE_XET: "1"
+    command: celery -A app.core.celery_app:celery worker -Q rag-queue --loglevel=info
+    volumes:
+      - uploads:/app/uploads
+      - model_cache:/home/appuser/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
-  pgdata:
+  pgdata16:
+  uploads:
+  model_cache:

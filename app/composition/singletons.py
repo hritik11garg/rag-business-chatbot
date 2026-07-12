@@ -9,6 +9,7 @@ Celery worker process each get their own copy, built on first use.
 The FastAPI lifespan calls these at startup so the first request
 doesn't pay the model-load cost either.
 """
+
 from functools import lru_cache
 
 from app.domain.llm_service import LLMService

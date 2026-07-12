@@ -21,11 +21,7 @@ class User(Base):
 
     # Multi-tenancy
     organization_id: Mapped[int] = mapped_column(
-        ForeignKey("organizations.id"),
-        nullable=False
+        ForeignKey("organizations.id"), nullable=False
     )
 
-    organization = relationship(
-        "Organization",
-        back_populates="users"
-    )
+    organization = relationship("Organization", back_populates="users")
