@@ -10,3 +10,6 @@ ipython==8.26.0
 
 # Eval corpus tooling (scripts/fetch_wikipedia.py renders articles to PDF)
 fpdf2==2.8.7
+
+# Load testing (benchmarks/locustfile.py)
+locust==2.45.0

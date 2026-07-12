@@ -43,6 +43,8 @@ platforms and internal knowledge tools are built.
 - Alembic database migrations
 - **Held-out eval harness with committed results** — see
   [Measured results](#-measured-results) below
+- **Load-tested at 50 concurrent users** (Locust, 4 uvicorn workers,
+  zero failures) — see [Measured results](#-measured-results) below
 - Pytest test suite (22 tests) for chat, streaming, and schemas
 
 ------------------------------------------------------------------------
@@ -229,6 +231,22 @@ PDFs ingested; graded by an independent LLM judge):
 Ingestion throughput: **59.8 docs/min · 25.6 chunks/sec**
 (12,855 chunks from 500 PDFs, single process, CPU MiniLM, zero failures).
 
+**Load test** — full method + tables: **[benchmarks/README.md](benchmarks/README.md)**.
+50 concurrent users (Locust) against 4 uvicorn workers for 3 minutes,
+retrieval running over the full 12,855-chunk corpus, LLM simulated at
+measured-realistic pacing (a free-tier cloud LLM can't sit inside a
+50-user run — the real model is measured separately below):
+
+| metric | value |
+|---|---:|
+| requests / failures | 4,360 / **0** |
+| sustained throughput | 24.3 req/s |
+| `/chat` p50 · p95 · p99 | 880 · 1,100 · 1,300 ms (incl. 750 ms simulated LLM → **~130 ms median stack overhead**) |
+| stream first token p50 · p95 | 490 · 680 ms |
+
+Real-LLM streaming time-to-first-token (production Groq model, n=20):
+**p50 318 ms · p95 692 ms**.
+
 ------------------------------------------------------------------------
 
 # 🗺 Roadmap
@@ -239,8 +257,9 @@ Ingestion throughput: **59.8 docs/min · 25.6 chunks/sec**
 - ✅ Prompt templating module
 - ✅ SSE streaming responses + summary memory
 - ✅ Held-out eval harness with committed results (see above)
-- Load benchmarks (Locust), CI pipeline, structured logging, rate
-  limiting, one-command Docker startup
+- ✅ Load benchmarks — Locust, 50 users, committed results (see above)
+- CI pipeline, structured logging, rate limiting, one-command Docker
+  startup
 
 ------------------------------------------------------------------------
 

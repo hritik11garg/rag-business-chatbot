@@ -47,7 +47,7 @@ Optional extras:
 
 ```powershell
 pip install -r requirements/test.txt   # pytest
-pip install -r requirements/dev.txt    # black, ruff, mypy, ipython, fpdf2 (eval corpus)
+pip install -r requirements/dev.txt    # black, ruff, mypy, ipython, fpdf2 (evals), locust (benchmarks)
 ```
 
 > ⚠️ This installs `torch` and `sentence-transformers` — the download is
@@ -191,6 +191,19 @@ bulk ingest → golden set → answers → judge). Requires
 `LLM_PROVIDER=groq` and `pip install -r requirements/dev.txt` (fpdf2).
 The stages checkpoint per item, so free-tier rate limits can interrupt
 them safely — rerun the same command to resume.
+
+---
+
+## 11. (Optional) Reproduce the load benchmarks
+
+The 50-user Locust results in [benchmarks/README.md](benchmarks/README.md)
+can be regenerated with the commands listed there: seed the bench
+users, start the local mock LLM (`benchmarks/mock_llm.py`) and the app
+with `LLM_BASE_URL` pointed at it, run Locust headless, then measure
+real-LLM streaming TTFT separately. Requires the Phase 5 eval corpus
+to be ingested first (step 10) and `pip install -r requirements/dev.txt`
+(locust). Afterwards clear the summary tasks the bench chats queued:
+`docker exec rag-redis redis-cli DEL rag-queue`.
 
 ---
 
