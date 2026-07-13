@@ -42,5 +42,36 @@ jobs:
       - name: Format check (black)
         run: black --check app tests scripts evals benchmarks
 
+      # Supply-chain gate (OWASP A06): fail the build on a known CVE in a
+      # shipped dependency. Scopes to base.txt — the production set — so
+      # dev-only tooling (black/pytest/ipython) can't gate a deploy.
+      # Each --ignore-vuln below is a deliberate, reviewed acceptance:
+      #   starlette   pinned by FastAPI 0.128; fix needs a coordinated
+      #               FastAPI+Starlette 1.x major bump (own task)
+      #   torch/      ML stack; fixes are major jumps (torch 2.10,
+      #   transformers  transformers 5.x) that break sentence-transformers;
+      #               not reachable by untrusted input in our flow
+      #   ecdsa       transitive via python-jose; no fix published
+      #               (Minerva timing) — we don't use ECDSA JWTs (HS256)
+      # Revisit whenever a dependency is bumped: drop any ID that no longer
+      # applies so the gate re-arms.
+      - name: Audit dependencies (pip-audit)
+        run: |
+          pip-audit -r requirements/base.txt \
+            --ignore-vuln PYSEC-2026-161 \
+            --ignore-vuln PYSEC-2026-249 \
+            --ignore-vuln PYSEC-2026-248 \
+            --ignore-vuln PYSEC-2026-2281 \
+            --ignore-vuln PYSEC-2026-2280 \
+            --ignore-vuln PYSEC-2025-217 \
+            --ignore-vuln PYSEC-2026-2290 \
+            --ignore-vuln PYSEC-2026-2288 \
+            --ignore-vuln PYSEC-2026-2289 \
+            --ignore-vuln PYSEC-2026-139 \
+            --ignore-vuln PYSEC-2026-2286 \
+            --ignore-vuln CVE-2025-3000 \
+            --ignore-vuln CVE-2025-3001 \
+            --ignore-vuln PYSEC-2026-1325
+
       - name: Tests (pytest)
         run: pytest -q

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_admin
 from app.api.schemas.common import MessageResponse
 from app.api.schemas.documents import DocumentOut, UploadResponse
 from app.composition.singletons import get_embedding_service
@@ -25,7 +25,7 @@ def list_documents(
 def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),  # mutates shared corpus
 ):
     use_case = UploadDocumentUseCase(
         db,
@@ -41,7 +41,7 @@ def upload_document(
 def delete_document(
     document_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),  # mutates shared corpus
 ):
     try:
         return DeleteDocumentUseCase(db).execute(

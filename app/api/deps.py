@@ -77,3 +77,22 @@ def get_current_user(
         )
 
     return user
+
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Function-level authorization (OWASP A01): a valid session is not
+    enough to mutate the shared knowledge base. Any active member may
+    read and chat; only an admin may add or remove source documents,
+    because those documents are what every member of the org queries.
+
+    Layers on top of get_current_user, so authentication (who you are)
+    stays separate from authorization (what you may do). Admin power is
+    implicitly org-scoped: the user carries their own organization_id,
+    so an admin can only act within their own tenant.
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator privileges required",
+        )
+    return current_user
