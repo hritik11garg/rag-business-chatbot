@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     RATE_LIMIT_AUTH: str = "10/minute"
     RATE_LIMIT_CHAT: str = "30/minute"
 
+    # Number of trusted reverse-proxy hops in front of the app. 0 (default)
+    # = directly exposed: use the socket peer IP and IGNORE X-Forwarded-For
+    # (a client could otherwise spoof it to dodge rate limits). Set to the
+    # real hop count (e.g. 1 behind a single nginx/ALB) so the limiter keys
+    # on the true client IP the trusted proxy recorded, not the proxy's IP.
+    TRUSTED_PROXY_COUNT: int = 0
+
     # Uploads — cap read into memory; content-type headers are
     # client-controlled, so size + magic-byte check are the pre-parse
     # defenses (see UploadDocumentUseCase)
@@ -56,6 +63,13 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env")
 
+    @property
+    def is_production(self) -> bool:
+        """Single source of truth for 'is this a production deployment?' —
+        drives the SECRET_KEY length floor and prod-only hardening such as
+        disabling the interactive API docs."""
+        return self.ENV.lower() in {"production", "prod"}
+
     @model_validator(mode="after")
     def _validate_secret_key(self) -> "Settings":
         """Fail fast on a weak signing key (OWASP A02).
@@ -70,9 +84,7 @@ class Settings(BaseSettings):
                 "SECRET_KEY is a placeholder — set a real random secret "
                 '(python -c "import secrets; print(secrets.token_hex(32))")'
             )
-        if self.ENV.lower() in {"production", "prod"} and (
-            len(self.SECRET_KEY) < _MIN_SECRET_LEN
-        ):
+        if self.is_production and len(self.SECRET_KEY) < _MIN_SECRET_LEN:
             raise ValueError(
                 f"SECRET_KEY must be at least {_MIN_SECRET_LEN} characters "
                 "in production"

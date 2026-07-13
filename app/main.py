@@ -37,7 +37,18 @@ async def lifespan(app: FastAPI):
     logger.info("app shutting down")
 
 
-app = FastAPI(title=settings.APP_NAME, version="0.1.0", lifespan=lifespan)
+# Interactive API docs map the entire attack surface, so they are
+# disabled in production (OWASP A05: Security Misconfiguration). They
+# stay on in dev/staging where they're a development aid, not exposure.
+_docs_disabled = settings.is_production
+app = FastAPI(
+    title=settings.APP_NAME,
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url=None if _docs_disabled else "/docs",
+    redoc_url=None if _docs_disabled else "/redoc",
+    openapi_url=None if _docs_disabled else "/openapi.json",
+)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
