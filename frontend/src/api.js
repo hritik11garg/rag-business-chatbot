@@ -1,29 +1,36 @@
-// Thin API client: token storage, one automatic refresh retry on 401,
-// and an async-generator SSE reader for the streaming chat endpoint
-// (EventSource can't POST, so the stream is parsed off fetch()).
+// API client for the cookie transport. Tokens live in httpOnly cookies the
+// browser sends automatically — this code never sees or stores them, so an
+// XSS payload has nothing to read (unlike the old localStorage approach).
+//
+// State-changing requests echo the readable csrf_token cookie back in an
+// X-CSRF-Token header (double-submit CSRF defense). A 401 triggers one
+// automatic refresh + retry. The SSE chat stream is parsed off fetch()
+// (EventSource can't POST).
 
-const STORAGE_KEY = "rag-chat-tokens";
-
-export function loadTokens() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null;
-  } catch {
-    return null;
-  }
+function getCookie(name) {
+  const hit = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(name + "="));
+  return hit ? decodeURIComponent(hit.slice(name.length + 1)) : null;
 }
 
-export function saveTokens(tokens) {
-  if (tokens) localStorage.setItem(STORAGE_KEY, JSON.stringify(tokens));
-  else localStorage.removeItem(STORAGE_KEY);
+// The access/refresh cookies are httpOnly (invisible here); the csrf cookie
+// is readable and is set for the life of the session, so its presence is our
+// "logged in" hint. Real authorization is always enforced server-side.
+export function isAuthed() {
+  return Boolean(getCookie("csrf_token"));
+}
+
+function csrfHeader() {
+  const token = getCookie("csrf_token");
+  return token ? { "X-CSRF-Token": token } : {};
 }
 
 export async function login(email, password) {
   const body = new URLSearchParams({ username: email, password });
   const res = await fetch("/auth/login", { method: "POST", body });
   if (!res.ok) throw new Error((await res.json()).detail || "Login failed");
-  const tokens = await res.json();
-  saveTokens(tokens);
-  return tokens;
+  return res.json(); // cookies are set by the server; body is ignored here
 }
 
 export async function signup(organizationName, email, password) {
@@ -41,58 +48,40 @@ export async function signup(organizationName, email, password) {
 }
 
 export async function logout() {
-  // Best-effort server-side revocation of the whole refresh family, then
-  // drop local tokens regardless of the network result.
-  const tokens = loadTokens();
-  if (tokens?.refresh_token) {
-    try {
-      await fetch("/auth/logout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: tokens.refresh_token }),
-      });
-    } catch {
-      /* offline logout still clears local state below */
-    }
+  // Best-effort server-side revocation of the whole refresh family; the
+  // server clears the cookies on its response.
+  try {
+    await fetch("/auth/logout", { method: "POST", headers: csrfHeader() });
+  } catch {
+    /* even if offline, the UI drops to the logged-out state */
   }
-  saveTokens(null);
 }
 
 async function tryRefresh() {
-  const tokens = loadTokens();
-  if (!tokens?.refresh_token) return null;
   const res = await fetch("/auth/refresh", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: tokens.refresh_token }),
+    headers: csrfHeader(),
   });
-  if (!res.ok) {
-    saveTokens(null);
-    return null;
-  }
-  const fresh = await res.json();
-  saveTokens(fresh);
-  return fresh;
+  return res.ok; // on success the server rotated the cookies for us
 }
 
-// fetch with Authorization; on 401 refreshes once and retries.
+// fetch with the cookie session; adds CSRF header on state-changing calls,
+// and on a 401 refreshes once and retries.
 export async function apiFetch(path, options = {}) {
-  const doFetch = (token) =>
+  const isMutating = (options.method || "GET").toUpperCase() !== "GET";
+  const doFetch = () =>
     fetch(path, {
       ...options,
       headers: {
         ...(options.headers || {}),
-        Authorization: `Bearer ${token}`,
+        ...(isMutating ? csrfHeader() : {}),
       },
     });
 
-  let tokens = loadTokens();
-  if (!tokens) throw new Error("Not logged in");
-  let res = await doFetch(tokens.access_token);
+  let res = await doFetch();
   if (res.status === 401) {
-    tokens = await tryRefresh();
-    if (!tokens) throw new Error("Session expired");
-    res = await doFetch(tokens.access_token);
+    if (!(await tryRefresh())) throw new Error("Session expired");
+    res = await doFetch();
   }
   return res;
 }

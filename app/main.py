@@ -1,9 +1,11 @@
 import logging
+import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, Request
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -11,10 +13,15 @@ from app.api.deps import get_current_user
 from app.api.routes import auth, documents, chat
 from app.composition.singletons import get_embedding_service, get_llm_service
 from app.core.config import settings
+from app.core.cookies import ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER
 from app.core.logging import request_id_var, setup_logging
 from app.core.ratelimit import limiter
 from app.db import models  # noqa: F401
 from app.db.models.user import User
+
+# Requests that can't be forged cross-site to mutate state (they're
+# read-only or CORS-preflight) skip the CSRF check.
+_CSRF_SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 
 setup_logging(settings.LOG_LEVEL)
 logger = logging.getLogger("app")
@@ -51,6 +58,33 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.middleware("http")
+async def csrf_protection_middleware(request: Request, call_next):
+    """Double-submit CSRF guard for the cookie transport (OWASP A05).
+
+    Only cookie-authenticated, state-changing requests to the app routes
+    need it: a request carrying an Authorization header is a Bearer client
+    (immune — an attacker can't set that header cross-site), and the auth
+    routes handle their own CSRF (login/signup mint the session; refresh/
+    logout check in-route). When enforced, the X-CSRF-Token header must
+    equal the csrf_token cookie — a value a cross-site page can't read.
+    """
+    if (
+        request.method not in _CSRF_SAFE_METHODS
+        and not request.url.path.startswith("/auth/")
+        and ACCESS_COOKIE in request.cookies
+        and "authorization" not in request.headers
+    ):
+        header = request.headers.get(CSRF_HEADER)
+        cookie = request.cookies.get(CSRF_COOKIE)
+        if not header or not cookie or not secrets.compare_digest(header, cookie):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "CSRF token missing or invalid"},
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")

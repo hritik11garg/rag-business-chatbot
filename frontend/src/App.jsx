@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   fetchDocuments,
-  loadTokens,
+  isAuthed,
   login,
   logout,
   signup,
@@ -10,7 +10,7 @@ import {
 } from "./api.js";
 
 export default function App() {
-  const [authed, setAuthed] = useState(Boolean(loadTokens()));
+  const [authed, setAuthed] = useState(isAuthed());
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
   return (
     <Chat

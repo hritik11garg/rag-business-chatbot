@@ -1,9 +1,10 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.cookies import ACCESS_COOKIE
 from app.core.security import ALGORITHM
 from app.db.models.user import User
 from app.db.session import SessionLocal
@@ -35,16 +36,32 @@ def get_token_service(db: Session = Depends(get_db)):
     )
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# auto_error=False: a missing Authorization header is not an error here —
+# we fall back to the access-token cookie (browser transport) before deciding.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
     """
-    Validates JWT token and returns the current user.
+    Validates the JWT and returns the current user.
+
+    Accepts the access token from the Authorization header (programmatic
+    clients) OR the httpOnly access-token cookie (browser). The header
+    wins when both are present, so a Bearer credential is always honored
+    as sent.
     """
+    if token is None:
+        token = request.cookies.get(ACCESS_COOKIE)
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
 
     try:
         payload = jwt.decode(
