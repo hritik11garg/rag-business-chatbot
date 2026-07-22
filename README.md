@@ -14,6 +14,38 @@ platforms and internal knowledge tools are built.
 
 ------------------------------------------------------------------------
 
+<!-- ===================== DEMO MEDIA — ACTION REQUIRED =====================
+Capture the 4 files described in docs/images/README.md, drop them into
+docs/images/, then DELETE this comment's opening and closing markers to
+publish the section. Until then it stays hidden so the README shows no
+broken-image icons.
+
+# 🎬 Demo
+
+![Upload → ask → streamed answer with sources](docs/images/demo.gif)
+
+| Login | Upload & document list | Streamed answer + sources |
+|---|---|---|
+| ![Login](docs/images/login.png) | ![Upload](docs/images/upload.png) | ![Chat](docs/images/chat.png) |
+
+------------------------------------------------------------------------
+======================================================================= -->
+
+# ⚡ At a glance
+
+| | |
+|---|---|
+| 📄 **Corpus indexed** | 500 PDFs → **12,855 vectors** (384-dim, HNSW) |
+| ⚡ **Load test** | **24.3 req/s** sustained, **0 failures** @ 50 concurrent users |
+| ⏱ **Streaming latency** | **318 ms** p50 time-to-first-token (real cloud LLM) |
+| 🎯 **Answer accuracy** | **86.7%** correct vs **33.3%** for the same model without retrieval |
+| 🛡 **Hallucination rate** | **2.0%** vs 4.0% baseline — a **50% reduction**, LLM-judged |
+| ✅ **Tests** | **117**, gated in CI (ruff · black · pytest · CVE audit) |
+| 🔌 **LLM providers** | **5**, swappable with one env variable |
+| 🐳 **Deploy** | One command: `docker compose --profile app up` |
+
+------------------------------------------------------------------------
+
 # 🚀 Core Capabilities
 
 - Multi-tenant architecture (organization-isolated data at every query)
@@ -64,27 +96,41 @@ platforms and internal knowledge tools are built.
 
 # 🧠 High-Level System Architecture
 
-                      ┌────────────────────┐
-                      │     User / Org     │
-                      └─────────┬──────────┘
-                                │
-                                ▼
-                      ┌────────────────────┐
-                      │   FastAPI Backend  │
-                      └─────────┬──────────┘
-                                │
-            ┌───────────────────┼────────────────────┐
-            ▼                   ▼                    ▼
-     ┌──────────────┐   ┌───────────────┐    ┌────────────────┐
-     │Postgres DB   │   │pgvector Index │    │LLM Provider    │
-     │(users/docs)  │   │(embeddings)   │    │(cloud or local)│
-     └──────────────┘   └───────────────┘    └────────────────┘
-                                │
-                                ▼
-                       ┌────────────────────┐
-                       │ Redis + Celery     │
-                       │ Async Workers      │
-                       └────────────────────┘
+```mermaid
+flowchart TB
+    UI["React SPA<br/>(httpOnly cookie session)"]
+
+    subgraph API["FastAPI application"]
+        MW["Middleware<br/>CSRF · security headers · rate limit · request ID"]
+        RT["Routes → Use cases<br/>(hexagonal, Protocol-injected)"]
+    end
+
+    subgraph DATA["Data plane"]
+        PG[("PostgreSQL<br/>users · orgs · docs · history")]
+        VEC[("pgvector<br/>12,855 chunk vectors · HNSW")]
+    end
+
+    subgraph ASYNC["Async plane"]
+        RQ[("Redis<br/>broker")]
+        CW["Celery worker<br/>FAQ generation · rolling summary"]
+    end
+
+    EMB["MiniLM embeddings<br/>(in-process, CPU)"]
+    LLM["LLM provider<br/>OpenAI · Groq · Gemini · Ollama · Claude"]
+
+    UI -->|"REST + SSE"| MW --> RT
+    RT --> PG
+    RT --> VEC
+    RT --> EMB
+    RT -->|"grounded prompt"| LLM
+    RT -.->|"enqueue"| RQ --> CW
+    CW --> LLM
+    CW --> VEC
+    CW --> PG
+```
+
+Every request carries an organization scope; retrieval, storage and the
+background jobs all filter on it (see [Multi-tenancy](#-multi-tenancy)).
 
 ------------------------------------------------------------------------
 
@@ -114,11 +160,74 @@ layer proves it: one OpenAI-compatible adapter serves OpenAI, Groq,
 Gemini, and Ollama; a second adapter serves Claude — and a factory
 picks one from `LLM_PROVIDER`, with zero changes to business logic.
 
+### Patterns in use
+
+| Pattern | Where | Why it's there |
+|---|---|---|
+| **Ports & Adapters** (hexagonal) | `domain/` Protocols vs `infrastructure/` implementations | Business logic never imports a vendor SDK |
+| **Repository** | `ChatHistoryRepository`, `RefreshTokenRepository`, `ConversationSummaryRepository` | Persistence is swappable and mockable without a database |
+| **Factory** | `infrastructure/llm/factory.py` | One env var selects the provider; adding one is a dict entry |
+| **Strategy** | `LLMService` / `EmbeddingService` implementations | Interchangeable algorithms behind a stable contract |
+| **Composition Root** | `composition/` | All wiring happens in one place; nothing else calls constructors |
+| **Dependency Injection** | Constructor injection everywhere + FastAPI `Depends` | Every use case is unit-testable with fakes — that's how 117 tests run with no DB or LLM |
+| **Singleton (bounded)** | `composition/singletons.py` via `lru_cache` | The 4-second MiniLM load happens once per process, not per request |
+
+------------------------------------------------------------------------
+
+# 🧩 Why no LangChain?
+
+Deliberate, not an oversight. The retrieval pipeline here is ~200 lines
+of explicit code, and that buys:
+
+- **Understanding over abstraction** — chunking, embedding, vector
+  search, prompt assembly and grounding are written out, not hidden
+  behind a chain object. Every design decision below was actually made.
+- **No framework lock-in** — swapping a provider is a factory entry.
+  There's no chain/agent API churn to track between releases.
+- **Lower latency** — the hot path is a query embedding, one SQL query
+  and one LLM call. No callback machinery or intermediate serialization.
+- **Debuggable stack traces** — failures point at project code, not
+  five layers inside a framework.
+- **A dependency I control** — fewer transitive packages, which matters
+  when CI fails the build on any dependency CVE.
+
+LangChain is a reasonable choice for rapid prototyping. This project
+optimizes for demonstrating the internals and running them in production.
+
+------------------------------------------------------------------------
+
+# 🧠 Engineering decisions
+
+| Decision | Rationale |
+|---|---|
+| **pgvector** over Pinecone/FAISS | Vectors live beside the relational data they belong to, so tenant isolation is a plain SQL `WHERE` — not a second system to keep consistent. No SaaS dependency, no sync job, transactional with the metadata. |
+| **HNSW index** | Approximate search keeps retrieval ~flat as the corpus grows; exact scan over 12,855 vectors would degrade linearly. Retrieval is not the bottleneck — the LLM is (~130 ms median stack overhead under 50-user load). |
+| **MiniLM (all-MiniLM-L6-v2)** | 384-dim, runs on CPU in-process. No embedding API cost, no network hop, no rate limit — and small enough that the load test embeds every query for real. |
+| **Celery + Redis** | FAQ generation and summary updates are LLM-bound and slow; running them inline would put seconds on every upload/chat. They're enqueued so the request path stays fast. |
+| **Protocol-based DI** | Enables the whole test suite to run with no Postgres, Redis or LLM — fast, deterministic CI. |
+| **SSE for streaming** | Time-to-first-token is what users perceive (318 ms vs a full response). Chosen over WebSockets because the stream is one-directional; SSE needs no extra protocol handling, and `fetch()` handles POST bodies that `EventSource` cannot. |
+| **Refresh-token rotation + reuse detection** | Access tokens stay stateless and short-lived; refresh tokens are stateful and single-use, so a stolen token is detectable — replaying a rotated one burns the whole family. |
+| **httpOnly cookies over localStorage** | Tokens JavaScript cannot read survive an XSS. The cost is CSRF exposure, paid for with SameSite=Strict + a double-submit token. |
+| **Request IDs in structured logs** | One correlation ID flows through routes, use cases and services via a `ContextVar`, so a single request's path is greppable across the whole system — without threading an argument through every signature. |
+| **One LLM call for answer + confidence** | The grounding self-grade comes back in the same response as the answer, halving round-trips versus scoring separately. |
+
 ------------------------------------------------------------------------
 
 # 🏗 Pipelines
 
 ## Document Upload Pipeline
+
+```mermaid
+flowchart LR
+    A["PDF upload"] --> B["Validate<br/>magic bytes · size · quota"]
+    B --> C["Sanitize filename<br/>store in uploads/org_&lt;id&gt;/"]
+    C --> D["Extract text<br/>(pypdf)"]
+    D --> E["Normalize +<br/>overlapping chunks"]
+    E --> F["MiniLM<br/>embeddings"]
+    F --> G[("pgvector")]
+    E -.->|"enqueue (capped)"| H["Celery:<br/>synthetic FAQs"]
+    H --> G
+```
 
 1.  User uploads a PDF under their organization
 2.  Backend validates PDF integrity & format
@@ -131,6 +240,19 @@ picks one from `LLM_PROVIDER`, with zero changes to business logic.
     retrieval boosting
 
 ## Chat Pipeline
+
+```mermaid
+flowchart LR
+    Q["Question"] --> I{"Intent?"}
+    I -->|"chitchat"| CC["Canned reply<br/>(no LLM, no retrieval)"]
+    I -->|"knowledge"| E["MiniLM<br/>query embedding"]
+    E --> S["Similarity search<br/>org-scoped · HNSW · top_k"]
+    S --> M["Load memory<br/>recent history + rolling summary"]
+    M --> P["Build grounded prompt"]
+    P --> L["LLM"]
+    L --> R["Answer + sources<br/>+ confidence"]
+    R -.->|"enqueue"| SU["Celery:<br/>summary update"]
+```
 
 1.  Intent classified — greetings get an instant chitchat reply
 2.  Knowledge questions are embedded via MiniLM
@@ -161,7 +283,46 @@ picks one from `LLM_PROVIDER`, with zero changes to business logic.
 | `POST` | `/chat/stream` | Same, streamed as SSE token events |
 | `GET` | `/health` | Health check |
 
-Interactive docs: **http://127.0.0.1:8000/docs**
+Interactive docs: **http://127.0.0.1:8000/docs** (disabled in production).
+
+### Example: ask a question
+
+```http
+POST /chat
+Content-Type: application/json
+Authorization: Bearer <access_token>
+
+{ "question": "What is the vacation policy?", "top_k": 5 }
+```
+
+```json
+{
+  "question": "What is the vacation policy?",
+  "answer": "Full-time employees accrue 20 days of paid leave per year, accruing monthly from the start date. Unused days carry over up to a maximum of 5.",
+  "sources": ["employee_handbook.pdf", "hr_policy_2026.pdf"],
+  "confidence": "high"
+}
+```
+
+### Example: stream the same answer
+
+`POST /chat/stream` returns Server-Sent Events — token events as the
+model produces them, then a final `done` event with the metadata:
+
+```
+event: token
+data: {"text": "Full-time employees accrue "}
+
+event: token
+data: {"text": "20 days of paid leave"}
+
+event: done
+data: {"sources": ["employee_handbook.pdf"], "confidence": "high"}
+```
+
+When nothing relevant is found, the model is instructed to abstain
+rather than guess — that abstention behaviour is what produces the
+**97.5%** correct-refusal rate in [Measured results](#-measured-results).
 
 ------------------------------------------------------------------------
 
@@ -232,12 +393,30 @@ tests. Highlights by category:
 
 ------------------------------------------------------------------------
 
-# 🔍 Why pgvector Instead of Pinecone/FAISS?
+# 🏢 Multi-tenancy
 
-- Fully local & open-source, embedded inside Postgres
-- Vectors live next to the relational data they belong to —
-  org-scoped filtering is a plain SQL `WHERE` clause
-- No external SaaS dependency; production-safe & scalable
+Every organization is an isolated island of data. Isolation is enforced
+in **SQL on every query**, not in application `if` statements — so there
+is no code path that can forget it.
+
+```mermaid
+flowchart TB
+    subgraph OrgA["🏢 Organization A"]
+        DA["Documents"] --- EA["Embeddings"] --- HA["Chat history"]
+    end
+    subgraph OrgB["🏢 Organization B"]
+        DB["Documents"] --- EB["Embeddings"] --- HB["Chat history"]
+    end
+    U["Authenticated request<br/>(organization_id from the token)"]
+    U -->|"WHERE organization_id = A"| OrgA
+    U -.->|"❌ never reachable"| OrgB
+```
+
+The retrieval query hard-codes the tenant filter, and an optional
+`document_ids` filter can only *narrow within* the organization — passing
+another tenant's document id simply matches nothing. Requesting a
+document that isn't yours returns **404, not 403**, so the API never
+confirms that someone else's record exists.
 
 ------------------------------------------------------------------------
 
@@ -339,6 +518,48 @@ Real-LLM streaming time-to-first-token (production Groq model, n=20):
 
 ------------------------------------------------------------------------
 
+# 📈 Repository at a glance
+
+| | |
+|---|---|
+| Python modules | **118** (73 application · 34 test · 11 tooling) |
+| Lines of Python | **~3,230** application · **~1,950** test |
+| React/CSS (demo UI) | ~640 lines |
+| REST + SSE endpoints | **11** |
+| Database tables | **7**, across **5** Alembic migrations |
+| Background tasks | **2** Celery tasks (FAQ generation, rolling summary) |
+| LLM providers | **5**, behind 2 adapters + a factory |
+| Tests | **117**, no database or LLM required |
+
+------------------------------------------------------------------------
+
+# ⚠ Current limitations
+
+Stated plainly — these are known boundaries, not undiscovered bugs:
+
+- **No OCR.** Text is extracted with pypdf, so scanned/image-only PDFs
+  yield nothing. Diagrams, charts and images inside PDFs are ignored.
+- **No table-structure extraction.** Tables flatten into prose, which
+  can blur row/column relationships in retrieved context.
+- **Single embedding model, no reranker.** Retrieval is pure dense
+  vector similarity — no BM25/hybrid search and no cross-encoder
+  reranking stage, both of which would raise recall on keyword-heavy
+  queries.
+- **Rate limiting is per worker process.** Counters are in-memory, so
+  with N uvicorn workers the effective ceiling is up to N× the
+  configured limit. A shared Redis backend would fix this.
+- **Single-node deployment.** Uploaded files live on a local volume, so
+  horizontal scaling needs shared/object storage.
+- **Access tokens aren't revocable** within their ~60-minute lifetime by
+  design (stateless/stateful split); logout revokes refresh tokens
+  immediately.
+- **Expired refresh tokens accumulate** — no periodic cleanup job yet.
+- **Benchmarks came from one machine**, with the load generator sharing
+  hardware with the system under test. Numbers are conservative rather
+  than flattering; see [benchmarks/README.md](benchmarks/README.md).
+
+------------------------------------------------------------------------
+
 # 🗺 Roadmap
 
 - ✅ Multi-provider LLM support (OpenAI / Groq / Gemini / Ollama / Claude)
@@ -355,8 +576,18 @@ Real-LLM streaming time-to-first-token (production Groq model, n=20):
 - ✅ httpOnly-cookie auth for the SPA with double-submit CSRF
 - ✅ Function-level authorization, CSP + security headers, dependency
   CVE gate in CI, ingestion abuse controls
-- Next: Redis-backed (multi-worker) rate limiting, periodic cleanup of
-  expired refresh tokens, full-response p95 tuning
+- Next, in priority order:
+  1. **Hybrid retrieval** — BM25 keyword search fused with dense vectors
+     via Reciprocal Rank Fusion, to fix the keyword-query weakness noted
+     in [Limitations](#-current-limitations)
+  2. **Cross-encoder reranking** — retrieve top-20, rerank to top-5
+     (`bge-reranker-base`) before the LLM sees anything
+  3. **Retrieval metrics** — Recall@k, MRR and precision alongside the
+     existing answer-quality eval, plus token/cost accounting
+  4. **Observability** — Prometheus metrics + Grafana for retrieval,
+     embedding and LLM latency
+  5. Redis-backed (multi-worker) rate limiting, expired-token cleanup,
+     OCR for scanned PDFs, full-response p95 tuning
 
 ------------------------------------------------------------------------
 
