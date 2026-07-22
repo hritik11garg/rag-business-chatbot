@@ -91,7 +91,8 @@ Afterwards, clear the summary tasks the bench chats queued (the Celery
 worker isn't running during the test, so they pile up in Redis):
 
 ```bash
-docker exec rag-redis redis-cli DEL rag-queue
+# Redis requires a password (see REDIS_PASSWORD in .env.example)
+docker exec rag-redis redis-cli -a "${REDIS_PASSWORD:-ragredispass}" DEL rag-queue
 ```
 
 ## Limitations

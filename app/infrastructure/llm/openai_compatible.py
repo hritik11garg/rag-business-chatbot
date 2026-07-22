@@ -27,10 +27,12 @@ class OpenAICompatibleLLMService:
         model: str,
         base_url: str | None = None,
         temperature: float = 0.1,
+        max_tokens: int = 512,
     ):
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
         self.temperature = temperature
+        self.max_tokens = max_tokens
 
     def generate_answer(self, *, question: str, context: str) -> str:
         response = self.client.chat.completions.create(
@@ -43,6 +45,7 @@ class OpenAICompatibleLLMService:
                 },
             ],
             temperature=self.temperature,
+            max_tokens=self.max_tokens,
         )
         return response.choices[0].message.content
 
@@ -61,6 +64,7 @@ class OpenAICompatibleLLMService:
                 },
             ],
             temperature=self.temperature,
+            max_tokens=self.max_tokens,
         )
         return parse_grounded_answer(response.choices[0].message.content)
 
@@ -77,6 +81,7 @@ class OpenAICompatibleLLMService:
                 },
             ],
             temperature=self.temperature,
+            max_tokens=self.max_tokens,
             stream=True,
         )
         for chunk in stream:

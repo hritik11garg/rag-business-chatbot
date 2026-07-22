@@ -19,15 +19,23 @@ class AnthropicLLMService:
     required), so it gets a dedicated adapter instead of a base_url swap.
     """
 
-    def __init__(self, *, api_key: str, model: str, temperature: float = 0.1):
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        temperature: float = 0.1,
+        max_tokens: int = 1024,
+    ):
         self.client = Anthropic(api_key=api_key)
         self.model = model
         self.temperature = temperature
+        self.max_tokens = max_tokens
 
     def generate_answer(self, *, question: str, context: str) -> str:
         response = self.client.messages.create(
             model=self.model,
-            max_tokens=1024,
+            max_tokens=self.max_tokens,
             system=SYSTEM_PROMPT,
             messages=[
                 {
@@ -44,7 +52,7 @@ class AnthropicLLMService:
     ) -> GroundedAnswer:
         response = self.client.messages.create(
             model=self.model,
-            max_tokens=1024,
+            max_tokens=self.max_tokens,
             system=SYSTEM_PROMPT,
             messages=[
                 {
@@ -61,7 +69,7 @@ class AnthropicLLMService:
     def stream_grounded_answer(self, *, question: str, context: str) -> Iterator[str]:
         with self.client.messages.stream(
             model=self.model,
-            max_tokens=1024,
+            max_tokens=self.max_tokens,
             system=SYSTEM_PROMPT,
             messages=[
                 {

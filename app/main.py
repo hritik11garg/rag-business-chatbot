@@ -23,6 +23,28 @@ from app.db.models.user import User
 # read-only or CORS-preflight) skip the CSRF check.
 _CSRF_SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 
+# Interactive-docs routes, exempt from the strict CSP (they load CDN
+# bundles). They are only served outside production.
+_DOCS_PATHS = {"/docs", "/redoc", "/openapi.json"}
+
+# Strict, self-only policy. script-src has no 'unsafe-inline'/'unsafe-eval',
+# so injected script cannot run; connect-src 'self' blocks exfiltration to
+# an attacker origin; frame-ancestors 'none' backs X-Frame-Options; and
+# base-uri/object-src 'none' close <base> hijacking and legacy plugins.
+# style-src allows inline styles because React attaches them at runtime.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'none'; "
+    "frame-ancestors 'none'; "
+    "form-action 'self'"
+)
+
 setup_logging(settings.LOG_LEVEL)
 logger = logging.getLogger("app")
 request_logger = logging.getLogger("app.request")
@@ -91,10 +113,13 @@ async def csrf_protection_middleware(request: Request, call_next):
 async def security_headers_middleware(request: Request, call_next):
     """Baseline hardening headers on every response (OWASP A05).
 
-    X-Content-Type-Options stops MIME sniffing; X-Frame-Options +
-    frame-ancestors stop clickjacking; Referrer-Policy stops URL
-    leakage; Permissions-Policy drops powerful browser features the
-    API never needs. HSTS is opt-in (TLS-only) via settings.
+    X-Content-Type-Options stops MIME sniffing; X-Frame-Options and the
+    CSP frame-ancestors directive together stop clickjacking;
+    Referrer-Policy stops URL leakage; Permissions-Policy drops powerful
+    browser features the API never needs; CSP constrains where scripts
+    may load from and where they may send data, so an XSS that ever gets
+    through has no way to execute injected script or exfiltrate. HSTS is
+    opt-in (TLS-only) via settings.
     """
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -103,6 +128,11 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers.setdefault(
         "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
     )
+    # Swagger/ReDoc pull their bundles from a CDN, so a self-only CSP
+    # would break them. They only exist outside production (see the
+    # docs gating above), so production always gets the strict policy.
+    if request.url.path not in _DOCS_PATHS:
+        response.headers.setdefault("Content-Security-Policy", _CSP)
     if settings.ENABLE_HSTS:
         response.headers.setdefault(
             "Strict-Transport-Security",

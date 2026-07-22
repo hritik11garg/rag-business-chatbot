@@ -41,21 +41,24 @@ platforms and internal knowledge tools are built.
 - Centralized prompt templates + response parsers (`app/prompts/`)
 - **Structured JSON logging** with a per-request correlation ID
   (`X-Request-ID` honored inbound, returned on every response)
-- **Refresh-token auth** (typed JWTs, rotation via `/auth/refresh`) and
-  **per-IP rate limiting** on auth + chat endpoints
+- **Hardened auth & authorization** — httpOnly cookie sessions with CSRF
+  protection, refresh-token rotation with reuse detection, and
+  admin-gated corpus mutations. See [Security](#-security) below
 - Document deletion with vector + file cleanup
 - Alembic database migrations
 - **One-command Docker startup** (`docker compose --profile app up`)
   — API, worker, Postgres, Redis, migrations included
-- **GitHub Actions CI**: ruff + black + pytest on every push
+- **GitHub Actions CI**: ruff + black + pytest + `pip-audit` CVE gate
+  on every push
 - **React demo frontend** (`frontend/`) — login, upload, streaming
   chat with confidence badges and sources
 - **Held-out eval harness with committed results** — see
   [Measured results](#-measured-results) below
 - **Load-tested at 50 concurrent users** (Locust, 4 uvicorn workers,
   zero failures) — see [Measured results](#-measured-results) below
-- Pytest test suite (45 tests): chat, streaming, auth/refresh flow,
-  upload pipeline, tenant isolation, eval plumbing
+- Pytest test suite (117 tests): chat, streaming, auth/refresh flow,
+  cookie + CSRF transport, authorization gates, upload pipeline and
+  abuse controls, tenant isolation, config validation, eval plumbing
 
 ------------------------------------------------------------------------
 
@@ -102,8 +105,9 @@ The codebase follows a layered, dependency-inverted design:
     │                    #   confidence scoring, FAQ generation
     ├── tasks/           # Celery background tasks
     ├── db/              # SQLAlchemy models + session
-    └── core/            # Settings, security (JWT/bcrypt), structured
-                         #   logging, rate limiting, Celery app
+    └── core/            # Settings, security (JWT/bcrypt), auth cookies
+                         #   + CSRF, structured logging, rate limiting,
+                         #   Celery app
 
 Use cases depend on **Protocols**, not concrete providers. The LLM
 layer proves it: one OpenAI-compatible adapter serves OpenAI, Groq,
@@ -148,6 +152,7 @@ picks one from `LLM_PROVIDER`, with zero changes to business logic.
 | `POST` | `/auth/signup` | Create an organization + first user |
 | `POST` | `/auth/login` | OAuth2 login → access + refresh token pair |
 | `POST` | `/auth/refresh` | Rotate a refresh token for a fresh pair |
+| `POST` | `/auth/logout` | Revoke the session's whole refresh family |
 | `GET` | `/me` | Current authenticated user |
 | `GET` | `/documents` | List the organization's documents |
 | `POST` | `/documents/upload` | Upload a PDF (triggers full RAG ingestion) |
@@ -157,6 +162,59 @@ picks one from `LLM_PROVIDER`, with zero changes to business logic.
 | `GET` | `/health` | Health check |
 
 Interactive docs: **http://127.0.0.1:8000/docs**
+
+------------------------------------------------------------------------
+
+# 🔐 Security
+
+Built against the **OWASP Top 10 / ASVS**, with every control covered by
+tests. Highlights by category:
+
+**Authentication & sessions (A07)**
+- Browser tokens live in **httpOnly + Secure + SameSite=Strict cookies**,
+  so JavaScript can never read them (an XSS has nothing to exfiltrate).
+  Bearer tokens are still accepted for programmatic clients.
+- **Double-submit CSRF**: a readable `csrf_token` cookie must be echoed in
+  an `X-CSRF-Token` header on cookie-authenticated state changes. Bearer
+  requests are exempt (an attacker can't set that header cross-site).
+- **Refresh-token rotation with reuse detection** — tokens are single-use
+  and server-tracked; replaying a rotated token burns the entire token
+  family. `/auth/logout` revokes it server-side.
+- Typed JWTs (`access` / `refresh`) enforced both directions, fixed
+  algorithm (no `alg=none` confusion), bcrypt password hashing.
+- `SECRET_KEY` is validated at startup: placeholders are rejected in every
+  environment, and production enforces a length floor.
+
+**Authorization (A01)**
+- Multi-tenant isolation is enforced in SQL on every query — cross-org
+  access returns 404, never another tenant's data.
+- Function-level authorization: only admins may mutate the shared corpus
+  (upload/delete); reads and chat are open to any active member.
+
+**Input handling & uploads (A03/A04)**
+- Path-traversal-proof filenames, **PDF magic-byte** signature validation
+  (the content-type header is client-controlled and not trusted), and a
+  size cap — all enforced before the parser runs.
+- Abuse controls: per-endpoint rate limits, a per-org document quota, and
+  a cap on FAQ generation so one upload can't amplify into hundreds of
+  LLM calls.
+- All SQL is parameterized; the tenant filter is unconditional.
+
+**Transport & headers (A05)**
+- Strict **Content-Security-Policy** (no inline/eval script, `connect-src
+  'self'`, `frame-ancestors 'none'`), plus `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, opt-in HSTS.
+- Interactive API docs are **disabled in production**.
+- Rate limiting keys on a spoof-resistant client IP (`TRUSTED_PROXY_COUNT`
+  controls how much of `X-Forwarded-For` is trusted).
+
+**Supply chain & infrastructure (A05/A06)**
+- CI fails the build on a known CVE in a shipped dependency (`pip-audit`),
+  with every accepted exception documented inline.
+- Containers run as a non-root user; Postgres and Redis publish on
+  loopback only and Redis requires authentication.
+- Celery pins JSON serialization (no pickle path) and enforces task time
+  limits so a hung call can't pin a worker.
 
 ------------------------------------------------------------------------
 
@@ -170,6 +228,7 @@ Interactive docs: **http://127.0.0.1:8000/docs**
   document_embeddings   Chunk vectors + FAQ vectors (384-dim, HNSW)
   chat_history          Conversation memory (recent turns)
   conversation_summaries  Rolling per-user summary (long-term memory)
+  refresh_tokens        Rotation + reuse detection (jti, family, revoked)
 
 ------------------------------------------------------------------------
 
@@ -233,14 +292,17 @@ pip install -r requirements/test.txt
 pytest
 ```
 
-45 tests covering the chat router (intent dispatch), the RAG chat use
+117 tests covering the chat router (intent dispatch), the RAG chat use
 case, streaming (confidence-marker holdback), request validation,
-prompt parsers, the auth flow (login / refresh rotation / token-type
-separation / rate limiting), the upload pipeline (failure cleanup +
-scheduler injection), the tenant-isolation SQL invariant, and the eval
-harness arithmetic — with fakes injected via the domain Protocols (no
-database or LLM needed). CI runs ruff, black, and the suite on every
-push.
+prompt parsers, the auth flow (login / refresh rotation / reuse
+detection / token-type separation / rate limiting), the cookie + CSRF
+transport (accept, reject, forged token, Bearer exemption),
+authorization gates (admin-only mutations), the upload pipeline
+(failure cleanup, path traversal, magic bytes, size cap, quota and
+amplification caps), security headers and CSP, `SECRET_KEY` validation,
+the tenant-isolation SQL invariant, and the eval harness arithmetic —
+with fakes injected via the domain Protocols (no database or LLM
+needed). CI runs ruff, black, `pip-audit`, and the suite on every push.
 
 ------------------------------------------------------------------------
 
@@ -289,8 +351,12 @@ Real-LLM streaming time-to-first-token (production Groq model, n=20):
 - ✅ CI pipeline (GitHub Actions), structured logging with request IDs,
   rate limiting + refresh tokens, one-command Docker startup, React
   demo frontend
-- Next: refresh-token revocation store, Redis-backed rate limiting,
-  httpOnly-cookie auth for the SPA
+- ✅ Refresh-token revocation store with rotation + reuse detection
+- ✅ httpOnly-cookie auth for the SPA with double-submit CSRF
+- ✅ Function-level authorization, CSP + security headers, dependency
+  CVE gate in CI, ingestion abuse controls
+- Next: Redis-backed (multi-worker) rate limiting, periodic cleanup of
+  expired refresh tokens, full-response p95 tuning
 
 ------------------------------------------------------------------------
 

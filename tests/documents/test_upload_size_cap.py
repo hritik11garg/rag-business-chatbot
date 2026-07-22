@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from app.core.config import settings
 from app.db.models.user import User
+from tests.documents.fakes import UnderQuotaDB
 from app.use_cases.upload_document import UploadDocumentUseCase
 
 
@@ -31,7 +32,7 @@ def test_oversized_upload_is_413_and_leaves_no_file(tmp_path, monkeypatch):
     # Valid PDF magic so we exercise the SIZE cap, not the magic check.
     upload = FakeUpload(b"%PDF-" + b"x" * (2 * 1024 * 1024))  # > 1 MB cap
 
-    use_case = UploadDocumentUseCase(db=None, embedding_service=None)
+    use_case = UploadDocumentUseCase(db=UnderQuotaDB(), embedding_service=None)
     with pytest.raises(HTTPException) as exc_info:
         use_case.execute(file=upload, user=make_user())
 
@@ -45,7 +46,7 @@ def test_non_pdf_content_type_is_400(tmp_path, monkeypatch):
     upload = FakeUpload(b"data", filename="x.exe")
     upload.content_type = "application/octet-stream"
 
-    use_case = UploadDocumentUseCase(db=None, embedding_service=None)
+    use_case = UploadDocumentUseCase(db=UnderQuotaDB(), embedding_service=None)
     with pytest.raises(HTTPException) as exc_info:
         use_case.execute(file=upload, user=make_user())
     assert exc_info.value.status_code == 400

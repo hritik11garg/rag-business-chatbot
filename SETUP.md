@@ -219,7 +219,9 @@ with `LLM_BASE_URL` pointed at it, run Locust headless, then measure
 real-LLM streaming TTFT separately. Requires the Phase 5 eval corpus
 to be ingested first (step 10) and `pip install -r requirements/dev.txt`
 (locust). Afterwards clear the summary tasks the bench chats queued:
-`docker exec rag-redis redis-cli DEL rag-queue`.
+`docker exec rag-redis redis-cli -a "$env:REDIS_PASSWORD" DEL rag-queue`
+(Redis now requires a password — see `REDIS_PASSWORD` in `.env.example`;
+the compose default is `ragredispass`).
 
 ---
 

@@ -57,6 +57,7 @@ def build_llm_service() -> LLMService:
             api_key=settings.ANTHROPIC_API_KEY,
             model=settings.LLM_MODEL or _ANTHROPIC_DEFAULT_MODEL,
             temperature=settings.LLM_TEMPERATURE,
+            max_tokens=settings.LLM_MAX_TOKENS,
         )
 
     defaults = _OPENAI_COMPATIBLE.get(provider)
@@ -81,4 +82,5 @@ def build_llm_service() -> LLMService:
         base_url=settings.LLM_BASE_URL or defaults.base_url,
         model=settings.LLM_MODEL or defaults.model,
         temperature=settings.LLM_TEMPERATURE,
+        max_tokens=settings.LLM_MAX_TOKENS,
     )

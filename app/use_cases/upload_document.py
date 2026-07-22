@@ -43,6 +43,14 @@ def safe_pdf_filename(raw: str | None) -> str:
     return f"{name or uuid.uuid4().hex}.pdf"
 
 
+class DocumentQuotaExceededError(Exception):
+    """The organization already holds MAX_DOCUMENTS_PER_ORG documents.
+
+    Rate limiting bounds how FAST a tenant can upload; this bounds how
+    MUCH they can accumulate, so one org can't exhaust shared storage.
+    """
+
+
 class PdfIngestError(Exception):
     """The saved PDF could not be ingested; the file has been removed."""
 
@@ -79,6 +87,18 @@ class UploadDocumentUseCase:
         """HTTP-facing path: validate, save the upload, then ingest."""
         if file.content_type != "application/pdf":
             raise HTTPException(400, "Only PDF files are supported")
+
+        # Per-tenant corpus cap, checked before a single byte is written.
+        existing = (
+            self.db.query(Document)
+            .filter(Document.organization_id == user.organization_id)
+            .count()
+        )
+        if existing >= settings.MAX_DOCUMENTS_PER_ORG:
+            raise DocumentQuotaExceededError(
+                f"Organization document limit of "
+                f"{settings.MAX_DOCUMENTS_PER_ORG} reached"
+            )
 
         # Org isolation folder
         org_dir = os.path.join(UPLOAD_BASE_DIR, f"org_{user.organization_id}")
@@ -184,7 +204,12 @@ class UploadDocumentUseCase:
             raise EmbeddingStorageError("Embedding generation failed") from exc
 
         if self.schedule_faq_generation is not None:
-            self.schedule_faq_generation(chunks, document.id, organization_id)
+            # FAQ generation costs ONE LLM call per chunk, so an unbounded
+            # chunk list turns a single upload into hundreds of paid calls.
+            # Cap it: the first N chunks are the most representative anyway.
+            self.schedule_faq_generation(
+                chunks[: settings.MAX_FAQ_CHUNKS], document.id, organization_id
+            )
 
         return {
             "id": document.id,

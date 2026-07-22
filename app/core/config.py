@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_AUTH: str = "10/minute"
     RATE_LIMIT_CHAT: str = "30/minute"
+    # Uploads are the most expensive endpoint (parse + embed every chunk +
+    # one LLM call per chunk for FAQ generation), so they get their own,
+    # much tighter budget than chat.
+    RATE_LIMIT_UPLOAD: str = "5/minute"
 
     # Number of trusted reverse-proxy hops in front of the app. 0 (default)
     # = directly exposed: use the socket peer IP and IGNORE X-Forwarded-For
@@ -34,6 +38,13 @@ class Settings(BaseSettings):
     # client-controlled, so size + magic-byte check are the pre-parse
     # defenses (see UploadDocumentUseCase)
     MAX_UPLOAD_MB: int = 25
+
+    # Abuse controls on the ingestion pipeline. Rate limiting bounds
+    # requests per minute; these bound the damage of the requests that do
+    # get through — total corpus size per tenant, and how many LLM calls a
+    # single upload can amplify into (one FAQ call per chunk otherwise).
+    MAX_DOCUMENTS_PER_ORG: int = 1000
+    MAX_FAQ_CHUNKS: int = 50
 
     # Send HSTS only when the app is actually served over TLS (behind a
     # TLS-terminating proxy in prod); leave off for plain-HTTP local dev.
@@ -53,6 +64,12 @@ class Settings(BaseSettings):
     LLM_MODEL: str | None = None
     LLM_BASE_URL: str | None = None
     LLM_TEMPERATURE: float = 0.1
+
+    # Cap on generated tokens. A grounded RAG answer is short, so bounding
+    # output length bounds the p95 latency tail (unbounded generation is
+    # what lets a verbose answer blow past the latency budget) and caps the
+    # per-request token cost. Raise it if answers get truncated.
+    LLM_MAX_TOKENS: int = 512
 
     # API keys — only the one matching LLM_PROVIDER is required
     # (ollama runs locally and needs no key)

@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_current_user, get_db, require_admin
+from app.core.ratelimit import limiter
 from app.db.models.user import User
 from app.main import app
 
@@ -54,8 +55,12 @@ def non_admin_client():
 
     app.dependency_overrides[get_current_user] = lambda: make_user(is_admin=False)
     app.dependency_overrides[get_db] = lambda: Boom()
+    # Upload/delete now carry a tight per-IP limit; reset between tests so
+    # rate-limit state can never leak in and turn a 403 assertion into 429.
+    limiter.reset()
     yield TestClient(app)
     app.dependency_overrides.clear()
+    limiter.reset()
 
 
 def test_non_admin_cannot_delete_document(non_admin_client):

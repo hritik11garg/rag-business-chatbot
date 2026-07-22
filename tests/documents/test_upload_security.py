@@ -9,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.db.models.user import User
+from tests.documents.fakes import UnderQuotaDB
 from app.use_cases.upload_document import (
     UploadDocumentUseCase,
     safe_pdf_filename,
@@ -54,7 +55,7 @@ def test_traversal_filename_writes_only_inside_org_dir(tmp_path, monkeypatch):
     canary.write_text("original")
 
     upload = FakeUpload(b"%PDF-1.4 fake", filename="../../canary.txt")
-    use_case = UploadDocumentUseCase(db=None, embedding_service=None)
+    use_case = UploadDocumentUseCase(db=UnderQuotaDB(), embedding_service=None)
 
     # ingest_pdf will fail parsing the fake PDF, but that's after the
     # write — what matters is WHERE it wrote. Patch ingest out.
@@ -71,7 +72,7 @@ def test_non_pdf_magic_bytes_rejected_415(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     # Header claims PDF, bytes are an executable — must be rejected.
     upload = FakeUpload(b"MZ\x90\x00 this is a PE binary", filename="x.pdf")
-    use_case = UploadDocumentUseCase(db=None, embedding_service=None)
+    use_case = UploadDocumentUseCase(db=UnderQuotaDB(), embedding_service=None)
 
     with pytest.raises(HTTPException) as exc_info:
         use_case.execute(file=upload, user=make_user())
