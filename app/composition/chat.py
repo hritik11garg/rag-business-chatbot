@@ -5,7 +5,11 @@ from app.use_cases.chat_with_kb import ChatWithKnowledgeBaseUseCase
 from app.use_cases.chitchat import ChitChatUseCase
 from app.domain.intent_classifier import IntentClassifier
 
-from app.composition.singletons import get_embedding_service, get_llm_service
+from app.composition.singletons import (
+    get_embedding_service,
+    get_llm_service,
+    get_reranker,
+)
 from app.infrastructure.db.chat_history_repository import DBChatHistoryRepository
 from app.infrastructure.db.summary_repository import (
     DBConversationSummaryRepository,
@@ -23,6 +27,7 @@ def build_chat_router_use_case(db: Session) -> ChatRouterUseCase:
         schedule_summary_update=lambda user_id, org_id: update_summary_task.delay(
             user_id, org_id
         ),
+        reranker=get_reranker(),
     )
 
     return ChatRouterUseCase(

@@ -500,6 +500,19 @@ PDFs ingested; graded by an independent LLM judge):
 Ingestion throughput: **59.8 docs/min · 25.6 chunks/sec**
 (12,855 chunks from 500 PDFs, single process, CPU MiniLM, zero failures).
 
+**Retrieval quality** (LLM-free, `evals/retrieval_eval.py`) — adding a
+cross-encoder reranker over the dense candidate pool:
+
+| metric | dense | + rerank |
+|---|---:|---:|
+| Recall@1 | 86.7% | **95.0%** (+8.3 pp) |
+| Recall@5 | 93.3% | 96.7% |
+| MRR | 0.901 | **0.956** |
+
+A headroom check was run *before* building the reranker (dense Recall@5
+sat below the Recall@20 pool ceiling, so there was room); it then
+recovered that headroom and put the best chunk first far more often.
+
 **Load test** — full method + tables: **[benchmarks/README.md](benchmarks/README.md)**.
 50 concurrent users (Locust) against 4 uvicorn workers for 3 minutes,
 retrieval running over the full 12,855-chunk corpus, LLM simulated at
@@ -541,10 +554,11 @@ Stated plainly — these are known boundaries, not undiscovered bugs:
   yield nothing. Diagrams, charts and images inside PDFs are ignored.
 - **No table-structure extraction.** Tables flatten into prose, which
   can blur row/column relationships in retrieved context.
-- **Single embedding model, no reranker.** Retrieval is pure dense
-  vector similarity — no BM25/hybrid search and no cross-encoder
-  reranking stage, both of which would raise recall on keyword-heavy
-  queries.
+- **No hybrid search.** Retrieval is dense vector similarity, optionally
+  refined by a cross-encoder reranker (measured, config-gated). There's
+  no BM25/keyword arm yet — the ~3% of eval questions whose source is
+  never retrieved would need hybrid (BM25 + dense) fusion, since
+  reranking can only reorder what dense search already surfaced.
 - **Rate limiting is per worker process.** Counters are in-memory, so
   with N uvicorn workers the effective ceiling is up to N× the
   configured limit. A shared Redis backend would fix this.
@@ -576,17 +590,17 @@ Stated plainly — these are known boundaries, not undiscovered bugs:
 - ✅ httpOnly-cookie auth for the SPA with double-submit CSRF
 - ✅ Function-level authorization, CSP + security headers, dependency
   CVE gate in CI, ingestion abuse controls
+- ✅ **Cross-encoder reranking** — retrieve top-20, rerank to top-5;
+  measured **+8.3 pp Recall@1** on the eval set (config-gated,
+  [evals/README.md](evals/README.md))
+- ✅ **Retrieval metrics** — Recall@k and MRR eval (`evals/retrieval_eval.py`)
 - Next, in priority order:
   1. **Hybrid retrieval** — BM25 keyword search fused with dense vectors
-     via Reciprocal Rank Fusion, to fix the keyword-query weakness noted
-     in [Limitations](#-current-limitations)
-  2. **Cross-encoder reranking** — retrieve top-20, rerank to top-5
-     (`bge-reranker-base`) before the LLM sees anything
-  3. **Retrieval metrics** — Recall@k, MRR and precision alongside the
-     existing answer-quality eval, plus token/cost accounting
-  4. **Observability** — Prometheus metrics + Grafana for retrieval,
+     via Reciprocal Rank Fusion, to recover the ~3% of queries dense
+     retrieval never surfaces (reranking can't — see Limitations)
+  2. **Observability** — Prometheus metrics + Grafana for retrieval,
      embedding and LLM latency
-  5. Redis-backed (multi-worker) rate limiting, expired-token cleanup,
+  3. Redis-backed (multi-worker) rate limiting, expired-token cleanup,
      OCR for scanned PDFs, full-response p95 tuning
 
 ------------------------------------------------------------------------

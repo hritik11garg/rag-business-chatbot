@@ -78,6 +78,15 @@ class Settings(BaseSettings):
     DEFAULT_TOP_K: int = 5
     MAX_TOP_K: int = 20
 
+    # Cross-encoder reranking: retrieve a wider RERANK_CANDIDATES pool by
+    # dense similarity, then reorder by a query-passage relevance model and
+    # keep the top_k. Off by default — enable only if the retrieval eval
+    # shows it helps this corpus (evals/retrieval_eval.py). The model is a
+    # small CPU-friendly cross-encoder.
+    RERANK_ENABLED: bool = False
+    RERANK_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    RERANK_CANDIDATES: int = 20
+
     # API keys — only the one matching LLM_PROVIDER is required
     # (ollama runs locally and needs no key)
     OPENAI_API_KEY: str | None = None

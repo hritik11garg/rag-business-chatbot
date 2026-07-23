@@ -7,6 +7,7 @@ from app.services.embedding_service import similarity_search
 from app.domain.embedding_service import EmbeddingService
 from app.domain.llm_service import LLMService
 from app.domain.chat_history_repository import ChatHistoryRepository
+from app.domain.reranker import Reranker
 from app.domain.summary_repository import ConversationSummaryRepository
 from app.prompts import split_confidence_marker
 
@@ -50,6 +51,7 @@ class ChatWithKnowledgeBaseUseCase:
         db,
         summary_repo: ConversationSummaryRepository | None = None,
         schedule_summary_update: Callable[[int, int], None] | None = None,
+        reranker: Reranker | None = None,
     ):
         self.embedding_service = embedding_service
         self.llm_service = llm_service
@@ -60,6 +62,10 @@ class ChatWithKnowledgeBaseUseCase:
         # raw recent history alone.
         self.summary_repo = summary_repo
         self.schedule_summary_update = schedule_summary_update
+        # Reranking is optional: None keeps the plain dense path. When set,
+        # we retrieve a wider pool and let the cross-encoder pick the top_k
+        # (measured +8.3pp Recall@1 on the eval set — see evals/README).
+        self.reranker = reranker
 
     def _retrieve(
         self,
@@ -70,13 +76,31 @@ class ChatWithKnowledgeBaseUseCase:
         document_ids: list[int] | None,
     ):
         query_embedding = self.embedding_service.embed_query(question)
-        return similarity_search(
+
+        if self.reranker is None:
+            return similarity_search(
+                db=self.db,
+                organization_id=user.organization_id,
+                query_embedding=query_embedding,
+                limit=top_k,
+                document_ids=document_ids,
+            )
+
+        # Retrieve-wide-then-rerank: pull a larger candidate pool by dense
+        # similarity, reorder it with the cross-encoder, keep the top_k.
+        pool = similarity_search(
             db=self.db,
             organization_id=user.organization_id,
             query_embedding=query_embedding,
-            limit=top_k,
+            limit=max(settings.RERANK_CANDIDATES, top_k),
             document_ids=document_ids,
         )
+        if not pool:
+            return pool
+        order = self.reranker.rerank(
+            query=question, passages=[row.content for row in pool]
+        )
+        return [pool[i] for i in order[:top_k]]
 
     def _build_full_context(self, *, user: User, matches) -> str:
         context = "\n\n".join([row.content for row in matches])

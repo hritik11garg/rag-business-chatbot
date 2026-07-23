@@ -41,6 +41,36 @@ kept in the results rather than cherry-picked out.
 counts (2 vs 4 events); the answer-accuracy gap (86.7% vs 33.3%) and the
 97.5% correct-abstention rate are the statistically stronger findings.
 
+## Retrieval quality — dense vs. cross-encoder reranking (2026-07-23)
+
+Measures the **retriever in isolation** (no LLM, no Groq budget): for each
+of the 60 answerable golden questions, does the source document appear in
+the top-k retrieved results, and at what rank? Run with
+`python -m evals.retrieval_eval [--rerank]`.
+
+| metric | dense (pgvector) | + rerank | Δ |
+|--------|-----------------:|---------:|--:|
+| Recall@1  | 86.7% | **95.0%** | **+8.3 pp** |
+| Recall@3  | 91.7% | 96.7% | +5.0 pp |
+| Recall@5  | 93.3% | 96.7% | +3.3 pp |
+| Recall@20 | 96.7% | 96.7% | — (pool ceiling) |
+| MRR       | 0.901 | **0.956** | +0.054 |
+
+**Method matters here.** Reranking can only reorder documents that dense
+retrieval already surfaced in the candidate pool, so its ceiling is
+Recall@20 (96.7%). The headroom check was run *first*: dense Recall@5
+(93.3%) sat below that ceiling, so reranking had room to help — and it
+recovered all of it, lifting Recall@5 to the 96.7% ceiling and, more
+usefully, **Recall@1 by +8.3 pp** by putting the single most relevant
+chunk first (the one the LLM weights most).
+
+Config: retrieve `RERANK_CANDIDATES=20` by dense similarity, rerank with
+`cross-encoder/ms-marco-MiniLM-L-6-v2`, keep `top_k=5`. Off by default
+(`RERANK_ENABLED`); the eval justified turning it on. The 4 documents
+never retrieved within the top-20 (Recall@20 = 96.7%, not 100%) are a
+*recall* gap reranking cannot close — only a mechanism that changes what
+gets retrieved (hybrid BM25 + dense) could, which is the next step.
+
 ## Ingestion throughput
 
 `scripts/bulk_ingest.py`, single process, local MiniLM (all-MiniLM-L6-v2)

@@ -11,7 +11,11 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.deps import get_current_user
 from app.api.routes import auth, documents, chat
-from app.composition.singletons import get_embedding_service, get_llm_service
+from app.composition.singletons import (
+    get_embedding_service,
+    get_llm_service,
+    get_reranker,
+)
 from app.core.config import settings
 from app.core.cookies import ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER
 from app.core.logging import request_id_var, setup_logging
@@ -61,6 +65,7 @@ async def lifespan(app: FastAPI):
     # the MiniLM model load (~4s) or the LLM client construction.
     get_embedding_service()
     get_llm_service()
+    get_reranker()  # loads the cross-encoder only if RERANK_ENABLED
     logger.info("models warmed, ready to serve")
     yield
     logger.info("app shutting down")
