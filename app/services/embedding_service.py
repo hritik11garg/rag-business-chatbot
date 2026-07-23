@@ -2,6 +2,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import bindparam, text
 
+from app.core.config import settings
 from app.db.models.document import Document
 from app.db.models.embedding import DocumentEmbedding
 from app.domain.embedding_service import EmbeddingService
@@ -64,7 +65,7 @@ def similarity_search(
     *,
     organization_id: int,
     query_embedding: List[float],
-    limit: int = 5,
+    limit: int = settings.DEFAULT_TOP_K,
     document_ids: List[int] | None = None,
 ):
     # The org filter is unconditional — tenant isolation must hold no

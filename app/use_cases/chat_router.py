@@ -1,3 +1,4 @@
+from app.core.config import settings
 from app.domain.intent import ChatIntent
 from app.domain.intent_classifier import IntentClassifier
 from app.use_cases.chat_with_kb import ChatWithKnowledgeBaseUseCase
@@ -22,7 +23,7 @@ class ChatRouterUseCase:
         *,
         question: str,
         user: User,
-        top_k: int = 5,
+        top_k: int = settings.DEFAULT_TOP_K,
         document_ids: list[int] | None = None,
     ) -> dict:
         intent = self.intent_classifier.classify(question)
@@ -50,7 +51,7 @@ class ChatRouterUseCase:
         *,
         question: str,
         user: User,
-        top_k: int = 5,
+        top_k: int = settings.DEFAULT_TOP_K,
         document_ids: list[int] | None = None,
     ):
         intent = self.intent_classifier.classify(question)

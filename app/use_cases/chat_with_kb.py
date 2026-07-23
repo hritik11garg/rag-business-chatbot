@@ -1,6 +1,7 @@
 import logging
 from typing import Callable, Iterator
 
+from app.core.config import settings
 from app.db.models.user import User
 from app.services.embedding_service import similarity_search
 from app.domain.embedding_service import EmbeddingService
@@ -126,7 +127,7 @@ Knowledge base context:
         *,
         question: str,
         user: User,
-        top_k: int = 5,
+        top_k: int = settings.DEFAULT_TOP_K,
         document_ids: list[int] | None = None,
     ) -> dict:
         matches = self._retrieve(
@@ -166,7 +167,7 @@ Knowledge base context:
         *,
         question: str,
         user: User,
-        top_k: int = 5,
+        top_k: int = settings.DEFAULT_TOP_K,
         document_ids: list[int] | None = None,
     ) -> Iterator[tuple[str, dict]]:
         """Streaming variant: yields ("token", {"text": ...}) events as

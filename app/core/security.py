@@ -11,6 +11,12 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 ALGORITHM = "HS256"
 
+# Precomputed at import: verified against when a login email is unknown, so
+# an absent account costs the same bcrypt time as a present one. Without
+# this, "no such user" returns in ~1 ms while a real verify takes ~200 ms —
+# a timing oracle that confirms which emails are registered (OWASP A07).
+_DUMMY_VERIFY_HASH = pwd_context.hash("constant-time-login-placeholder")
+
 
 def hash_password(password: str) -> str:
     """
@@ -26,6 +32,16 @@ def verify_password(password: str, hashed_password: str) -> bool:
     Verify a password against its hash.
     """
     return pwd_context.verify(password, hashed_password)
+
+
+def dummy_verify(password: str) -> None:
+    """Burn one bcrypt verification and discard the result.
+
+    Call this on the login path when the email is unknown, so the response
+    time matches a real credential check and can't be used to enumerate
+    which accounts exist.
+    """
+    pwd_context.verify(password, _DUMMY_VERIFY_HASH)
 
 
 def create_access_token(

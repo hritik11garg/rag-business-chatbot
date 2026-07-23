@@ -110,7 +110,9 @@ export async function* streamChat(question) {
   const res = await apiFetch("/chat/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, top_k: 5 }),
+    // top_k omitted on purpose: the server owns the default (settings
+    // .DEFAULT_TOP_K), so there's one source of truth, not a copy here.
+    body: JSON.stringify({ question }),
   });
   if (!res.ok) throw new Error((await res.json()).detail || "Chat failed");
 

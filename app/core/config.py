@@ -71,6 +71,13 @@ class Settings(BaseSettings):
     # per-request token cost. Raise it if answers get truncated.
     LLM_MAX_TOKENS: int = 512
 
+    # Retrieval fan-out (single source of truth for the whole chat path —
+    # request schema default, use-case defaults, and the SQL LIMIT). Higher
+    # top_k trades prompt cost and latency for recall; MAX bounds what a
+    # client may request so nobody can pull the whole corpus as context.
+    DEFAULT_TOP_K: int = 5
+    MAX_TOP_K: int = 20
+
     # API keys — only the one matching LLM_PROVIDER is required
     # (ollama runs locally and needs no key)
     OPENAI_API_KEY: str | None = None

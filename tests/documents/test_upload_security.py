@@ -6,11 +6,11 @@ import io
 import os
 
 import pytest
-from fastapi import HTTPException
 
 from app.db.models.user import User
 from tests.documents.fakes import UnderQuotaDB
 from app.use_cases.upload_document import (
+    NotAPdfError,
     UploadDocumentUseCase,
     safe_pdf_filename,
 )
@@ -68,14 +68,14 @@ def test_traversal_filename_writes_only_inside_org_dir(tmp_path, monkeypatch):
     assert os.path.dirname(result["path"]).endswith(os.path.join("uploads", "org_3"))
 
 
-def test_non_pdf_magic_bytes_rejected_415(tmp_path, monkeypatch):
+def test_non_pdf_magic_bytes_rejected(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    # Header claims PDF, bytes are an executable — must be rejected.
+    # Header claims PDF, bytes are an executable — must be rejected. The
+    # use case raises a domain exception; the route maps it to 415.
     upload = FakeUpload(b"MZ\x90\x00 this is a PE binary", filename="x.pdf")
     use_case = UploadDocumentUseCase(db=UnderQuotaDB(), embedding_service=None)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotAPdfError):
         use_case.execute(file=upload, user=make_user())
-    assert exc_info.value.status_code == 415
     org_dir = tmp_path / "uploads" / "org_3"
     assert list(org_dir.iterdir()) == []  # nothing left on disk

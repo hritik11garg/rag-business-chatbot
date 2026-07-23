@@ -90,6 +90,41 @@ def test_login_wrong_password_is_401(client):
     assert response.status_code == 401
 
 
+def test_login_unknown_email_pays_bcrypt_cost(monkeypatch):
+    # Constant-time login (OWASP A07): an unknown email must still trigger
+    # a bcrypt verification so its response time can't be told apart from a
+    # real account's. We assert the dummy-verify path runs and the message
+    # is the same opaque 401.
+    import app.api.routes.auth as auth_module
+
+    calls = []
+    monkeypatch.setattr(auth_module, "dummy_verify", lambda pw: calls.append(pw))
+
+    class NoUserDB:
+        def query(self, *a, **k):
+            return self
+
+        def filter(self, *a, **k):
+            return self
+
+        def first(self):
+            return None
+
+    app.dependency_overrides[get_db] = lambda: NoUserDB()
+    limiter.reset()
+    try:
+        resp = TestClient(app).post(
+            "/auth/login",
+            data={"username": "ghost@nowhere.com", "password": "whatever"},
+        )
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Invalid credentials"
+        assert calls == ["whatever"]  # the constant-time branch ran
+    finally:
+        app.dependency_overrides.clear()
+        limiter.reset()
+
+
 def test_refresh_rotates_the_pair(client):
     refresh_token = login(client).json()["refresh_token"]
     response = client.post("/auth/refresh", json={"refresh_token": refresh_token})

@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.db.models.chat_history import ChatHistory
+from app.domain.chat_history_repository import ChatMessage
 
 HISTORY_LIMIT = 6
 
@@ -10,14 +11,17 @@ class DBChatHistoryRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_recent_history(self, *, user_id: int) -> List[ChatHistory]:
-        return (
+    def get_recent_history(self, *, user_id: int) -> List[ChatMessage]:
+        rows = (
             self.db.query(ChatHistory)
             .filter(ChatHistory.user_id == user_id)
             .order_by(ChatHistory.created_at.desc())
             .limit(HISTORY_LIMIT)
             .all()[::-1]
         )
+        # Map the ORM rows to the domain read model at the boundary so no
+        # SQLAlchemy object escapes the repository.
+        return [ChatMessage(role=r.role, message=r.message) for r in rows]
 
     def save_message(
         self,

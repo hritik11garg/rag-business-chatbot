@@ -17,7 +17,7 @@ from app.core.cookies import (
     set_auth_cookies,
 )
 from app.core.ratelimit import limiter
-from app.core.security import verify_password
+from app.core.security import dummy_verify, verify_password
 from app.db.models.user import User
 from app.use_cases.auth_tokens import AuthTokenService, InvalidRefreshToken
 from app.use_cases.signup_organization import (
@@ -86,7 +86,16 @@ def login(
     token is minted for the double-submit defense."""
     user = db.query(User).filter(User.email == form_data.username).first()
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    # Constant-time: an unknown email still pays the bcrypt cost, so the
+    # response time can't reveal whether the account exists (OWASP A07).
+    # Both branches return the same opaque message.
+    if not user:
+        dummy_verify(form_data.password)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+    if not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",

@@ -4,7 +4,7 @@ import uuid
 from typing import Callable
 
 from sqlalchemy.orm import Session
-from fastapi import UploadFile, HTTPException
+from fastapi import UploadFile
 
 from app.core.config import settings
 from app.domain.embedding_service import EmbeddingService
@@ -43,11 +43,30 @@ def safe_pdf_filename(raw: str | None) -> str:
     return f"{name or uuid.uuid4().hex}.pdf"
 
 
+# --- Domain exceptions ------------------------------------------------------
+# The use case raises these; the route maps each to an HTTP status. Keeping
+# HTTP out of here means the ingestion logic is reusable off the web path
+# (e.g. bulk ingestion) and unit-testable without asserting on status codes.
+
+
+class InvalidContentTypeError(Exception):
+    """Declared content-type is not application/pdf (route -> 400)."""
+
+
+class NotAPdfError(Exception):
+    """File bytes fail the PDF magic-byte check (route -> 415)."""
+
+
+class FileTooLargeError(Exception):
+    """Upload exceeded MAX_UPLOAD_MB (route -> 413)."""
+
+
 class DocumentQuotaExceededError(Exception):
     """The organization already holds MAX_DOCUMENTS_PER_ORG documents.
 
     Rate limiting bounds how FAST a tenant can upload; this bounds how
     MUCH they can accumulate, so one org can't exhaust shared storage.
+    Route -> 403.
     """
 
 
@@ -84,9 +103,15 @@ class UploadDocumentUseCase:
         self.schedule_faq_generation = schedule_faq_generation
 
     def execute(self, *, file: UploadFile, user: User) -> dict:
-        """HTTP-facing path: validate, save the upload, then ingest."""
+        """HTTP-facing path: validate, save the upload, then ingest.
+
+        Raises domain exceptions (not HTTPException) — the route owns the
+        status-code mapping. `file` stays a FastAPI UploadFile because this
+        method IS the web entry point; the HTTP-free reusable core is
+        ingest_pdf().
+        """
         if file.content_type != "application/pdf":
-            raise HTTPException(400, "Only PDF files are supported")
+            raise InvalidContentTypeError("Only PDF files are supported")
 
         # Per-tenant corpus cap, checked before a single byte is written.
         existing = (
@@ -139,23 +164,18 @@ class UploadDocumentUseCase:
                 f.write(block)
         if not_pdf:
             os.remove(file_path)
-            raise HTTPException(415, "File content is not a valid PDF")
+            raise NotAPdfError("File content is not a valid PDF")
         if too_large:
             os.remove(file_path)
-            raise HTTPException(
-                413, f"File exceeds the {settings.MAX_UPLOAD_MB} MB upload limit"
+            raise FileTooLargeError(
+                f"File exceeds the {settings.MAX_UPLOAD_MB} MB upload limit"
             )
 
-        try:
-            return self.ingest_pdf(
-                file_path=file_path,
-                organization_id=user.organization_id,
-                uploaded_by=user.id,
-            )
-        except UnreadablePdfError as exc:
-            raise HTTPException(400, str(exc)) from exc
-        except EmbeddingStorageError as exc:
-            raise HTTPException(500, str(exc)) from exc
+        return self.ingest_pdf(
+            file_path=file_path,
+            organization_id=user.organization_id,
+            uploaded_by=user.id,
+        )
 
     def ingest_pdf(
         self, *, file_path: str, organization_id: int, uploaded_by: int

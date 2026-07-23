@@ -13,6 +13,11 @@ from app.use_cases.delete_document import DeleteDocumentUseCase, DocumentNotFoun
 from app.use_cases.list_documents import ListDocumentsUseCase
 from app.use_cases.upload_document import (
     DocumentQuotaExceededError,
+    FileTooLargeError,
+    InvalidContentTypeError,
+    NotAPdfError,
+    UnreadablePdfError,
+    EmbeddingStorageError,
     UploadDocumentUseCase,
 )
 
@@ -43,8 +48,18 @@ def upload_document(
     )
     try:
         return use_case.execute(file=file, user=current_user)
+    except InvalidContentTypeError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except NotAPdfError as exc:
+        raise HTTPException(415, str(exc)) from exc
+    except FileTooLargeError as exc:
+        raise HTTPException(413, str(exc)) from exc
     except DocumentQuotaExceededError as exc:
         raise HTTPException(403, str(exc)) from exc
+    except UnreadablePdfError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except EmbeddingStorageError as exc:
+        raise HTTPException(500, str(exc)) from exc
 
 
 @router.delete("/{document_id}", status_code=200, response_model=MessageResponse)
