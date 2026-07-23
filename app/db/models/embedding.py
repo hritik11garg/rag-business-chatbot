@@ -1,5 +1,6 @@
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ForeignKey, Index, Integer, Text
+from sqlalchemy import Computed, ForeignKey, Index, Integer, Text
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -15,6 +16,12 @@ class DocumentEmbedding(Base):
             postgresql_using="hnsw",
             postgresql_ops={"embedding": "vector_l2_ops"},
         ),
+        # GIN index backing the lexical (keyword) arm of hybrid retrieval.
+        Index(
+            "ix_document_embeddings_content_tsv",
+            "content_tsv",
+            postgresql_using="gin",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -29,6 +36,15 @@ class DocumentEmbedding(Base):
     )
 
     content: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Postgres full-text vector, maintained by the DB from `content` (a
+    # STORED generated column — the app never writes it). Backs the lexical
+    # arm of hybrid retrieval so keyword matches complement dense vectors.
+    content_tsv = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('english', content)", persisted=True),
+        nullable=True,
+    )
 
     embedding = mapped_column(Vector(384), nullable=False)
 
