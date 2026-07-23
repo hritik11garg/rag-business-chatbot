@@ -87,6 +87,13 @@ class Settings(BaseSettings):
     RERANK_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     RERANK_CANDIDATES: int = 20
 
+    # Hybrid retrieval: fuse the dense vector ranking with a Postgres
+    # full-text (keyword) ranking via Reciprocal Rank Fusion. Recovers
+    # queries where the answer hinges on an exact term a dense embedding
+    # blurs (proper nouns, IDs). Measured +Recall@5 and a higher pool
+    # ceiling on the eval set; off by default. Composes with reranking.
+    HYBRID_ENABLED: bool = False
+
     # API keys — only the one matching LLM_PROVIDER is required
     # (ollama runs locally and needs no key)
     OPENAI_API_KEY: str | None = None

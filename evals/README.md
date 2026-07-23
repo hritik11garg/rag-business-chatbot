@@ -41,35 +41,43 @@ kept in the results rather than cherry-picked out.
 counts (2 vs 4 events); the answer-accuracy gap (86.7% vs 33.3%) and the
 97.5% correct-abstention rate are the statistically stronger findings.
 
-## Retrieval quality — dense vs. cross-encoder reranking (2026-07-23)
+## Retrieval quality — dense vs. hybrid vs. reranking (2026-07-23)
 
 Measures the **retriever in isolation** (no LLM, no Groq budget): for each
 of the 60 answerable golden questions, does the source document appear in
 the top-k retrieved results, and at what rank? Run with
-`python -m evals.retrieval_eval [--rerank]`.
+`python -m evals.retrieval_eval [--hybrid] [--rerank]`.
 
-| metric | dense (pgvector) | + rerank | Δ |
-|--------|-----------------:|---------:|--:|
-| Recall@1  | 86.7% | **95.0%** | **+8.3 pp** |
-| Recall@3  | 91.7% | 96.7% | +5.0 pp |
-| Recall@5  | 93.3% | 96.7% | +3.3 pp |
-| Recall@20 | 96.7% | 96.7% | — (pool ceiling) |
-| MRR       | 0.901 | **0.956** | +0.054 |
+| metric | dense | + hybrid | + rerank | **hybrid + rerank** |
+|--------|------:|---------:|---------:|--------------------:|
+| Recall@1  | 86.7% | 90.0% | 95.0% | **96.7%** |
+| Recall@5  | 93.3% | 96.7% | 96.7% | **96.7%** |
+| Recall@20 | 96.7% | 98.3% | 96.7% | **98.3%** |
+| MRR       | 0.901 | 0.920 | 0.956 | **0.968** |
 
-**Method matters here.** Reranking can only reorder documents that dense
-retrieval already surfaced in the candidate pool, so its ceiling is
-Recall@20 (96.7%). The headroom check was run *first*: dense Recall@5
-(93.3%) sat below that ceiling, so reranking had room to help — and it
-recovered all of it, lifting Recall@5 to the 96.7% ceiling and, more
-usefully, **Recall@1 by +8.3 pp** by putting the single most relevant
-chunk first (the one the LLM weights most).
+The two techniques move different things, and **compose**:
 
-Config: retrieve `RERANK_CANDIDATES=20` by dense similarity, rerank with
-`cross-encoder/ms-marco-MiniLM-L-6-v2`, keep `top_k=5`. Off by default
-(`RERANK_ENABLED`); the eval justified turning it on. The 4 documents
-never retrieved within the top-20 (Recall@20 = 96.7%, not 100%) are a
-*recall* gap reranking cannot close — only a mechanism that changes what
-gets retrieved (hybrid BM25 + dense) could, which is the next step.
+- **Reranking** (cross-encoder over the pool) only *reorders* what dense
+  search already found, so its ceiling is the pool recall (96.7%). It
+  earns its keep on **precision@1**: Recall@1 86.7% → 95.0% by putting the
+  single most relevant chunk first — the one the LLM weights most.
+- **Hybrid** (dense ⊕ Postgres full-text, fused by Reciprocal Rank Fusion)
+  *changes* the pool, so it can lift the **ceiling itself**: Recall@20
+  96.7% → 98.3%, recovering a document dense embeddings missed entirely
+  because the answer hinged on an exact proper noun ("Krona") a vector
+  blurs. Reranking alone can never do this.
+- **Together:** Recall@1 **86.7% → 96.7% (+10 pp)**, MRR 0.901 → 0.968 —
+  Recall@1 reaches the (now higher) pool ceiling, i.e. for every question
+  whose document is retrievable, the right one is ranked first.
+
+**Discipline note.** The headroom check was run *before* building each
+stage: dense Recall@5 (93.3%) sat below Recall@20, so there was room to
+work with. Config: retrieve `RERANK_CANDIDATES=20`, optionally fuse the
+keyword arm (`HYBRID_ENABLED`), optionally rerank
+(`cross-encoder/ms-marco-MiniLM-L-6-v2`), keep `top_k=5`. Both off by
+default; the eval justified each. The 1 remaining out-of-pool document
+(Recall@20 = 98.3%, not 100%) is a golden-question flaw, not a retrieval
+gap.
 
 ## Ingestion throughput
 

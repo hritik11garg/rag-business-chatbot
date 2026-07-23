@@ -57,6 +57,9 @@ broken-image icons.
 - pgvector semantic similarity search
 - pgvector semantic similarity search with an HNSW index, configurable
   top-k, and optional per-document filtering
+- Optional **hybrid retrieval** (dense ⊕ keyword via Reciprocal Rank
+  Fusion) and **cross-encoder reranking** — each measured and config-gated
+  (see [Measured results](#-measured-results))
 - Intent routing — chitchat handled instantly, knowledge questions go
   through the full RAG pipeline
 - Synthetic FAQ generation as a Celery background task (retrieval boost)
@@ -500,18 +503,20 @@ PDFs ingested; graded by an independent LLM judge):
 Ingestion throughput: **59.8 docs/min · 25.6 chunks/sec**
 (12,855 chunks from 500 PDFs, single process, CPU MiniLM, zero failures).
 
-**Retrieval quality** (LLM-free, `evals/retrieval_eval.py`) — adding a
-cross-encoder reranker over the dense candidate pool:
+**Retrieval quality** (LLM-free, `evals/retrieval_eval.py`) — two
+composable upgrades over plain dense retrieval:
 
-| metric | dense | + rerank |
-|---|---:|---:|
-| Recall@1 | 86.7% | **95.0%** (+8.3 pp) |
-| Recall@5 | 93.3% | 96.7% |
-| MRR | 0.901 | **0.956** |
+| metric | dense | + hybrid | + rerank | hybrid + rerank |
+|---|---:|---:|---:|---:|
+| Recall@1 | 86.7% | 90.0% | 95.0% | **96.7%** |
+| Recall@5 | 93.3% | 96.7% | 96.7% | **96.7%** |
+| MRR | 0.901 | 0.920 | 0.956 | **0.968** |
 
-A headroom check was run *before* building the reranker (dense Recall@5
-sat below the Recall@20 pool ceiling, so there was room); it then
-recovered that headroom and put the best chunk first far more often.
+**Hybrid** (dense ⊕ keyword, fused by RRF) raises the recall *ceiling* —
+it recovers documents an embedding misses on exact terms. **Reranking**
+(cross-encoder) raises *precision@1* within the pool. Together, Recall@1
+climbs **+10 pp** to the pool ceiling. Each was headroom-checked and
+measured before shipping ([evals/README.md](evals/README.md)).
 
 **Load test** — full method + tables: **[benchmarks/README.md](benchmarks/README.md)**.
 50 concurrent users (Locust) against 4 uvicorn workers for 3 minutes,
@@ -554,11 +559,11 @@ Stated plainly — these are known boundaries, not undiscovered bugs:
   yield nothing. Diagrams, charts and images inside PDFs are ignored.
 - **No table-structure extraction.** Tables flatten into prose, which
   can blur row/column relationships in retrieved context.
-- **No hybrid search.** Retrieval is dense vector similarity, optionally
-  refined by a cross-encoder reranker (measured, config-gated). There's
-  no BM25/keyword arm yet — the ~3% of eval questions whose source is
-  never retrieved would need hybrid (BM25 + dense) fusion, since
-  reranking can only reorder what dense search already surfaced.
+- **Keyword arm is Postgres full-text, not true BM25.** Hybrid retrieval
+  fuses dense vectors with `ts_rank_cd` over a GIN index — solid and
+  dependency-free, but not term-saturating BM25. A dedicated BM25 engine
+  (e.g. a ParadeDB/`pg_search` extension) would rank keyword relevance
+  more precisely on long documents.
 - **Rate limiting is per worker process.** Counters are in-memory, so
   with N uvicorn workers the effective ceiling is up to N× the
   configured limit. A shared Redis backend would fix this.
@@ -590,31 +595,40 @@ Stated plainly — these are known boundaries, not undiscovered bugs:
 - ✅ httpOnly-cookie auth for the SPA with double-submit CSRF
 - ✅ Function-level authorization, CSP + security headers, dependency
   CVE gate in CI, ingestion abuse controls
+- ✅ **Hybrid retrieval** — dense ⊕ Postgres full-text fused by RRF;
+  raises the recall ceiling (config-gated, [evals/README.md](evals/README.md))
 - ✅ **Cross-encoder reranking** — retrieve top-20, rerank to top-5;
-  measured **+8.3 pp Recall@1** on the eval set (config-gated,
-  [evals/README.md](evals/README.md))
+  precision@1 **+8.3 pp** on its own, **+10 pp** stacked with hybrid
 - ✅ **Retrieval metrics** — Recall@k and MRR eval (`evals/retrieval_eval.py`)
 - Next, in priority order:
-  1. **Hybrid retrieval** — BM25 keyword search fused with dense vectors
-     via Reciprocal Rank Fusion, to recover the ~3% of queries dense
-     retrieval never surfaces (reranking can't — see Limitations)
-  2. **Observability** — Prometheus metrics + Grafana for retrieval,
+  1. **Observability** — Prometheus metrics + Grafana for retrieval,
      embedding and LLM latency
+  2. True **BM25** keyword ranking (ParadeDB/`pg_search`) in place of
+     Postgres `ts_rank`
   3. Redis-backed (multi-worker) rate limiting, expired-token cleanup,
      OCR for scanned PDFs, full-response p95 tuning
 
 ------------------------------------------------------------------------
 
-# 🏆 Enterprise Value
+# Design goals
 
-This project mirrors how companies build internal AI assistants,
-customer support bots, private enterprise search, and knowledge
-retrieval platforms.
+The system is built to reflect how production RAG platforms — internal
+knowledge assistants, private enterprise search, support automation — are
+actually engineered, prioritizing:
 
-Perfect for: ✔ Portfolio ✔ Freelancing ✔ Backend/AI Interviews
+- **Correctness you can measure**, not assert — every quality and
+  performance claim in this README traces to a committed, reproducible
+  eval or benchmark.
+- **Security as a first-class requirement**, reviewed against the OWASP
+  Top 10 on every change (see [Security](#-security)).
+- **A dependency-inverted architecture** that keeps business logic free of
+  frameworks and vendors, so providers and components are swappable and
+  the whole system is testable without a database or an LLM.
+- **Operational readiness** — structured logging, migrations, rate
+  limiting, containerized deployment, and CI that gates the build.
 
 ------------------------------------------------------------------------
 
-# 👨‍💻 Author
+# Author
 
-Hritik Garg 🚀
+**Hritik Garg** — [garghritikgarg@gmail.com](mailto:garghritikgarg@gmail.com)

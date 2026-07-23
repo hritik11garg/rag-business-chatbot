@@ -4,18 +4,22 @@ This measures the RETRIEVER in isolation (no LLM, no Groq budget): for each
 answerable question, does the document the question was written from appear
 in the top-k retrieved results, and at what rank?
 
-It is also the headroom test for reranking. Reranking can only promote a
-relevant document that dense retrieval already surfaced within the wider
-candidate pool into the final top-k. So:
+It also separates the two retrieval upgrades by what they can move:
 
-    reranking's ceiling  =  Recall@20 (candidate pool)  -  Recall@5 (final)
+  - Reranking only REORDERS the candidate pool, so its ceiling is the pool
+    recall (Recall@20). It raises precision@1 (Recall@1 / MRR) but can
+    never retrieve a document dense search missed.
+  - Hybrid CHANGES the pool by fusing a keyword ranking in, so it can lift
+    the ceiling itself — recovering exact-term matches (proper nouns, IDs)
+    that a dense embedding blurs.
 
-If that gap is ~0, reranking cannot help and we should not build it.
+Run each mode, compare, and only ship what the numbers justify.
 
 Usage:
-    python -m evals.retrieval_eval                 # dense baseline
-    python -m evals.retrieval_eval --rerank        # with cross-encoder
-    python -m evals.retrieval_eval --candidates 30 # wider candidate pool
+    python -m evals.retrieval_eval                    # dense baseline
+    python -m evals.retrieval_eval --hybrid           # dense + BM25-ish (RRF)
+    python -m evals.retrieval_eval --rerank           # dense + cross-encoder
+    python -m evals.retrieval_eval --hybrid --rerank  # full stack
 """
 
 import argparse
@@ -26,7 +30,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.composition.singletons import get_embedding_service  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
-from app.services.embedding_service import similarity_search  # noqa: E402
+from app.services.embedding_service import (  # noqa: E402
+    lexical_search,
+    reciprocal_rank_fusion,
+    similarity_search,
+)
 from evals.common import (
     GOLDEN_PATH,
     RESULTS_DIR,
@@ -47,7 +55,12 @@ def _doc_rank(ranked_filenames: list[str], golden_source: str) -> int | None:
     return None
 
 
-def evaluate(*, candidates: int, use_rerank: bool) -> dict:
+def _mode_name(use_hybrid: bool, use_rerank: bool) -> str:
+    base = "hybrid" if use_hybrid else "dense"
+    return f"{base}+rerank" if use_rerank else base
+
+
+def evaluate(*, candidates: int, use_hybrid: bool, use_rerank: bool) -> dict:
     golden = [g for g in read_jsonl(GOLDEN_PATH) if g["type"] == "answerable"]
     if not golden:
         raise SystemExit("No answerable golden questions found.")
@@ -66,13 +79,25 @@ def evaluate(*, candidates: int, use_rerank: bool) -> dict:
 
         for item in golden:
             question = item["question"]
-            # Retrieve the wider candidate pool once.
-            matches = similarity_search(
+            embedding = embedder.embed_query(question)
+            dense = similarity_search(
                 db=db,
                 organization_id=org_id,
-                query_embedding=embedder.embed_query(question),
+                query_embedding=embedding,
                 limit=candidates,
             )
+            if use_hybrid:
+                lexical = lexical_search(
+                    db=db,
+                    organization_id=org_id,
+                    query_text=question,
+                    limit=candidates,
+                )
+                # Fuse the dense and keyword rankings; keep the same pool
+                # size so Recall@k is compared like-for-like against dense.
+                matches = reciprocal_rank_fusion(dense, lexical, limit=candidates)
+            else:
+                matches = dense
             if reranker is not None:
                 order = reranker.rerank(
                     query=question,
@@ -95,7 +120,7 @@ def evaluate(*, candidates: int, use_rerank: bool) -> dict:
         found_in_pool = sum(1 for r in ranks if r is not None) / total
 
         return {
-            "mode": "rerank" if use_rerank else "dense",
+            "mode": _mode_name(use_hybrid, use_rerank),
             "candidates": candidates,
             "questions": total,
             "recall_at_k": recall,
@@ -109,10 +134,15 @@ def evaluate(*, candidates: int, use_rerank: bool) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidates", type=int, default=20)
+    parser.add_argument("--hybrid", action="store_true")
     parser.add_argument("--rerank", action="store_true")
     args = parser.parse_args()
 
-    result = evaluate(candidates=args.candidates, use_rerank=args.rerank)
+    result = evaluate(
+        candidates=args.candidates,
+        use_hybrid=args.hybrid,
+        use_rerank=args.rerank,
+    )
 
     print(
         f"\nRetrieval eval — {result['mode']} "

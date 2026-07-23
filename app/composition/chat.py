@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.use_cases.chat_router import ChatRouterUseCase
 from app.use_cases.chat_with_kb import ChatWithKnowledgeBaseUseCase
 from app.use_cases.chitchat import ChitChatUseCase
@@ -28,6 +29,7 @@ def build_chat_router_use_case(db: Session) -> ChatRouterUseCase:
             user_id, org_id
         ),
         reranker=get_reranker(),
+        use_hybrid=settings.HYBRID_ENABLED,
     )
 
     return ChatRouterUseCase(
