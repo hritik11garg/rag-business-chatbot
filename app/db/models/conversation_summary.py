@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Integer, Text, DateTime
+from sqlalchemy import Column, Integer, Text, DateTime, ForeignKey
 
 from app.db.base import Base
 
@@ -16,8 +16,22 @@ class ConversationSummary(Base):
     __tablename__ = "conversation_summaries"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, unique=True, index=True, nullable=False)
-    organization_id = Column(Integer, index=True, nullable=False)
+    # ON DELETE CASCADE mirrors chat_history: deleting the user/org erases
+    # their long-term memory too, so no orphaned PII survives an account
+    # deletion (privacy by design).
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    organization_id = Column(
+        Integer,
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
     summary = Column(Text, nullable=False)
     updated_at = Column(
         DateTime,
